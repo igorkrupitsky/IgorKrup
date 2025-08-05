@@ -1,0 +1,119 @@
+sRemoteAppFolder = "\\pwas0038\download\IgorKrup" 'Copy: IgorKrup.dll, itextsharp.dll, Keyboard.dll
+Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
+Dim shell : Set shell = CreateObject("WScript.Shell")
+sFolderPath = GetFolderPath()
+sLibPath = sFolderPath & "\bin\Debug\IgorKrup.dll"
+
+If fso.FileExists(sLibPath) = False Then
+    If sRemoteAppFolder <> "" Then
+        sAppFolder = GetAppFolder()
+        DownloadDlls sRemoteAppFolder, sAppFolder
+        sLibPath = sAppFolder   & "\IgorKrup.dll"
+    Else
+        sLibPath = ""
+    End If
+End If
+
+If fso.FileExists(sLibPath) Then
+    RegisterComClass "IgorKrup", "{6332A55E-EEFF-433B-9976-41A4A0420877}", sLibPath, "IgorKrup.PDF"
+    RegisterComClass "IgorKrup", "{179F44FC-862E-472E-AD91-2BFAFD7763ED}", sLibPath, "IgorKrup.EdgeDriver"
+    RegisterComClass "IgorKrup", "{7142584B-8680-4FD6-9F60-8649F6BF6966}", sLibPath, "IgorKrup.Control"
+    
+    on error resume next
+    Set o = CreateObject("IgorKrup.Control")
+    
+    If Err.number = 0 Then
+        MsgBox "Registed " & sLibPath
+    Else
+        MsgBox "Could not register " & sLibPath & ", " & Err.number & ", " & Err.Description
+    End If
+
+    on error goto 0
+Else
+    MsgBox "Cound not find " & sLibPath
+End if
+
+Function GetAppFolder()
+    If fso.FolderExists(sRemoteAppFolder) = False Then
+        MsgBox "Remote App folder cannot be reached: " & sRemoteAppFolder
+    End If
+
+    Dim sUserAppFolder: sUserAppFolder = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%")
+    If fso.FolderExists(sUserAppFolder) = False Then
+        MsgBox "User App Folder does not exist: " & sUserAppFolder
+    End If
+
+    Dim sAppFolder: sAppFolder = sUserAppFolder & "\IgorKrup"
+    If fso.FolderExists(sAppFolder) = False Then
+        fso.CreateFolder sAppFolder
+    End If
+
+    GetAppFolder = sAppFolder
+End Function
+
+Sub DownloadDlls(sFromFolder, sToFolder)
+    Dim sRemoteFilePath, sLocalFilePath
+
+    For Each sDllName in Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll")
+        sRemoteFilePath = sFromFolder & "\" & sDllName
+        sLocalFilePath  = sToFolder  & "\" & sDllName
+        If fso.FileExists(sRemoteFilePath) Then
+            If fso.FileExists(sLocalFilePath) Then
+                If fso.GetFileVersion(sLocalFilePath) <> fso.GetFileVersion(sRemoteFilePath) Then
+                    'Versions are different
+                    fso.CopyFile sRemoteFilePath, sLocalFilePath, True
+                End If
+            Else
+                fso.CopyFile sRemoteFilePath, sLocalFilePath
+            End If
+        End If
+    Next
+End Sub
+
+Sub RegisterComClass(assemblyName, clsid, dllFullPath, progId)
+    Dim baseKey, codebase
+    baseKey = "HKCU\Software\Classes\"
+    codebase = "file:///" & Replace(dllFullPath, "\", "/")
+
+    On Error Resume Next
+    If shell.RegRead(baseKey & "CLSID\" & clsid & "\InprocServer32\CodeBase") = codebase Then
+        'MsgBox "Class is already registered: " & clsid
+        'Exit Sub
+    End If
+    On Error GoTo 0
+
+    ' ProgID key
+    shell.RegWrite baseKey & progId & "\", progId, "REG_SZ"
+    shell.RegWrite baseKey & progId & "\CLSID\", clsid, "REG_SZ"
+
+    ' CLSID root
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\", progId, "REG_SZ"
+
+    ' InprocServer32 base
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\", "mscoree.dll", "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\ThreadingModel", "Both", "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\Class", progId, "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\Assembly", assemblyName & ", Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\RuntimeVersion", "v4.0.30319", "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\CodeBase", codebase, "REG_SZ"
+
+    ' Version-specific entry
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\1.0.0.0\Class", progId, "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\1.0.0.0\Assembly", assemblyName & ", Version=1.0.0.0, Culture=neutral, PublicKeyToken=null", "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\1.0.0.0\RuntimeVersion", "v4.0.30319", "REG_SZ"
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\InprocServer32\1.0.0.0\CodeBase", codebase, "REG_SZ"
+
+    ' ProgID again under CLSID
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\ProgId\", progId, "REG_SZ"
+
+    ' Optional: Mark as safe for scripting & initialization
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\Implemented Categories\{7DD95801-9882-11CF-9FA9-00AA006C42C4}", "", "REG_SZ" ' Safe for scripting
+    shell.RegWrite baseKey & "CLSID\" & clsid & "\Implemented Categories\{7DD95802-9882-11CF-9FA9-00AA006C42C4}", "", "REG_SZ" ' Safe for initializing
+End Sub
+
+Function GetFolderPath()
+	Dim oFile 'As Scripting.File
+	Set oFile = fso.GetFile(WScript.ScriptFullName)
+	GetFolderPath = oFile.ParentFolder
+End Function
+
