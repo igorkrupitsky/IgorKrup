@@ -1,23 +1,24 @@
 ﻿Public Class Form1
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
+
+        Dim ie As New IgorKrup.EdgeDriver
+        ie.sSharedDownloadFolder = "" '\\pwdb3030\download\Macros\Selenium\Selenium"
+        ie.UpdateDriver()
+        ie.GetUrl("https://google.com")
+        Dim r = ie.ExecuteScript("return document.title")
+        MsgBox(r)
+        ie.Quit()
+
         'EdgeTest()
         'ImageSearchTest()
         'OcrTest()
-        PdfTest()
+        'PdfTest()
     End Sub
 
     Sub PdfTest()
         Dim oPDF As New IgorKrup.PDF
         Dim sPath = "C:\Users\80014379\Desktop\How to Generate a Certificate Signing Request.pdf"
         MsgBox(oPDF.PageCount(sPath))
-    End Sub
-
-    Sub EdgeTest()
-        Dim ie As New IgorKrup.EdgeDriver
-        ie.GetUrl("https://www.google.com")
-        Dim r = ie.ExecuteScript("return document.title")
-        MsgBox(r)
-        ie.Quit()
     End Sub
 
     Sub ImageSearchTest()

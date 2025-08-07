@@ -1,4 +1,4 @@
-sRemoteAppFolder = "\\pwas0038\download\IgorKrup" 'Copy: IgorKrup.dll, itextsharp.dll, Keyboard.dll
+sRemoteAppFolder = "\\pwas0038\download\IgorKrup" 'Copy: IgorKrup.dll, itextsharp.dll, Keyboard.dll, ICSharpCode.SharpZipLib.dll
 Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
 Dim shell : Set shell = CreateObject("WScript.Shell")
 sFolderPath = GetFolderPath()
@@ -54,7 +54,7 @@ End Function
 Sub DownloadDlls(sFromFolder, sToFolder)
     Dim sRemoteFilePath, sLocalFilePath
 
-    For Each sDllName in Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll")
+    For Each sDllName in Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll")
         sRemoteFilePath = sFromFolder & "\" & sDllName
         sLocalFilePath  = sToFolder  & "\" & sDllName
         If fso.FileExists(sRemoteFilePath) Then

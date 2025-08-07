@@ -13,3 +13,4 @@ C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\obj\Debug\IgorKrupTest.vbpr
 C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\obj\Debug\IgorKrupTest.exe
 C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\obj\Debug\IgorKrupTest.xml
 C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\obj\Debug\IgorKrupTest.pdb
+C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\bin\Debug\ICSharpCode.SharpZipLib.dll
