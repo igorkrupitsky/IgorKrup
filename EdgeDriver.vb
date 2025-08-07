@@ -14,7 +14,7 @@ Imports System.Text.RegularExpressions
 <ComVisible(True), ClassInterface(ClassInterfaceType.AutoDual)>
 Public Class EdgeDriver
 
-    Public sSharedDownloadFolder As String = "\\pwdb3030\download\Macros\Selenium\Selenium"
+    Public sSharedDownloadFolder As String = ""
     Public sEdgeDriverPath As String = ""
     Public iPort As Integer = 9515
 
@@ -25,15 +25,19 @@ Public Class EdgeDriver
         sEdgeDriverPath = GetEdgeDriverPath()
     End Sub
 
-    Public Sub GetUrl(url As String)
-
+    Public Sub GetUrl(url As String, Optional username As String = "", Optional password As String = "")
         If proc Is Nothing Then
             If sEdgeDriverPath = "" Then
                 MsgBox($"msedgedriver.exe is missing. Run UpdateDriver() or manually download msedgedriver.exe to {AppDomain.CurrentDomain.BaseDirectory} from https://developer.microsoft.com/en-us/microsoft-edge/tools/webdrive")
                 Exit Sub
             End If
-
             Init()
+        End If
+
+        If username <> "" And password <> "" Then
+            ' Insert credentials into the URL
+            Dim uri As New Uri(url)
+            url = uri.Scheme & "://" & username & ":" & password & "@" & uri.Host & uri.PathAndQuery
         End If
 
         Dim serializer As New JavaScriptSerializer()
@@ -74,11 +78,483 @@ Public Class EdgeDriver
         SendRequest($"http://localhost:{iPort}/session/{sessionId}/frame", "POST", json)
     End Sub
 
+    ' Switch to parent frame
+    Public Sub SwitchToParentFrame()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/frame/parent", "POST", "{}")
+    End Sub
+
     Public Sub Quit()
         SendRequest($"http://localhost:{iPort}/session/{sessionId}", "DELETE", "")
         'proc.Kill()
     End Sub
 
+    Public Sub CloseAllWindows()
+        SendRequest($"http://localhost:{iPort}/session", "DELETE", "")
+    End Sub
+
+
+    ' Navigate back in browser history
+    Public Sub NavigateBack()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/back", "POST", "{}")
+    End Sub
+
+    ' Navigate forward in browser history
+    Public Sub NavigateForward()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/forward", "POST", "{}")
+    End Sub
+
+    ' Refresh the current page
+    Public Sub Refresh()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/refresh", "POST", "{}")
+    End Sub
+
+    ' Get the current URL
+    Public Function GetCurrentUrl() As String
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/url", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    ' Get the title of the current page
+    Public Function GetTitle() As String
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/title", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    ' Add a cookie
+    Public Sub AddCookie(name As String, value As String)
+        Dim payload = New Dictionary(Of String, Object) From {{"cookie", New Dictionary(Of String, Object) From {{"name", name}, {"value", value}}}}
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/cookie", "POST", sJson)
+    End Sub
+
+    ' Delete all cookies
+    Public Sub DeleteAllCookies()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/cookie", "DELETE", "")
+    End Sub
+
+
+    ' Accept JavaScript alert
+    Public Sub AcceptAlert()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/alert/accept", "POST", "{}")
+    End Sub
+
+    ' Dismiss JavaScript alert
+    Public Sub DismissAlert()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/alert/dismiss", "POST", "{}")
+    End Sub
+
+    ' Get alert text
+    Public Function GetAlertText() As String
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/alert/text", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    ' Set implicit wait timeout (milliseconds)
+    Public Sub SetImplicitWait(milliseconds As Integer)
+        Dim payload = New Dictionary(Of String, Object) From {{"implicit", milliseconds}}
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/timeouts", "POST", sJson)
+    End Sub
+
+
+    ' Maximize browser window
+    Public Sub MaximizeWindow()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/window/maximize", "POST", "{}")
+    End Sub
+
+    ' Minimize browser window
+    Public Sub MinimizeWindow()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/window/minimize", "POST", "{}")
+    End Sub
+
+    ' Set browser window size
+    Public Sub SetWindowSize(width As Integer, height As Integer)
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"width", width},
+        {"height", height}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/window/rect", "POST", sJson)
+    End Sub
+
+    ' Get browser window size
+    Public Function GetWindowSize() As Dictionary(Of String, Object)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/window/rect", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+    End Function
+
+    ' Close the current window
+    Public Sub CloseWindow()
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/window", "DELETE", "")
+    End Sub
+
+    Public Function GetPageSource() As String
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/source", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    Public Function GetWindowHandles() As String()
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/window/handles", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+    End Function
+    Public Sub SwitchToWindow(windowHandle As String)
+        Dim payload = New Dictionary(Of String, Object) From {{"handle", windowHandle}}
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/window", "POST", sJson)
+    End Sub
+
+    ' Take screenshot and save to path
+    Public Sub TakeScreenshot(savePath As String)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/screenshot", "GET", "")
+        Dim base64String = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+        Dim bytes = Convert.FromBase64String(base64String)
+        File.WriteAllBytes(savePath, bytes)
+    End Sub
+
+    Public Sub CaptureFullPageScreenshot(savePath As String)
+        Dim metrics = GetWindowSize()
+        Dim params = New Dictionary(Of String, Object) From {
+        {"format", "png"},
+        {"fromSurface", True},
+        {"clip", New Dictionary(Of String, Object) From {
+            {"x", 0},
+            {"y", 0},
+            {"width", metrics("width")},
+            {"height", metrics("height")},
+            {"scale", 1.0}
+        }}
+    }
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"cmd", "Page.captureScreenshot"},
+        {"params", params}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+        Dim base64 = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")("data").ToString()
+        Dim bytes = Convert.FromBase64String(base64)
+        File.WriteAllBytes(savePath, bytes)
+    End Sub
+
+
+    Public Function FindElementsByCss(selector As String) As String()
+        Return FindElementsBy("css selector", selector)
+    End Function
+
+    Public Function FindElementsByXpath(selector As String) As String()
+        Return FindElementsBy("xpath", selector)
+    End Function
+
+    Public Function FindElementsById(selector As String) As String()
+        Return FindElementsBy("id", selector)
+    End Function
+
+    Public Function FindElementsByName(selector As String) As String()
+        Return FindElementsBy("name", selector)
+    End Function
+
+    Public Function FindElementsByTagName(selector As String) As String()
+        Return FindElementsBy("tag name", selector)
+    End Function
+
+    Public Function FindElementsByClassName(selector As String) As String()
+        Return FindElementsBy("class name", selector)
+    End Function
+
+    Public Function FindElementsByLinkText(selector As String) As String()
+        Return FindElementsBy("link text", selector)
+    End Function
+
+    Public Function FindElementsByPartialLinkText(selector As String) As String()
+        Return FindElementsBy("partial link text", selector)
+    End Function
+
+    Public Function FindElementsBy(sUsing As String, selector As String) As String()
+        Dim payload = New Dictionary(Of String, Object) From {{"using", sUsing}, {"value", selector}}
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/elements", "POST", sJson)
+
+        Dim rawArray = New JavaScriptSerializer().Deserialize(Of Object())(resp)
+        Dim result As New List(Of String)
+
+        For Each item As Object In rawArray
+            Dim elementDict = CType(item, Dictionary(Of String, Object))
+            result.Add(elementDict("element-6066-11e4-a52e-4f735466cecf").ToString())
+        Next
+
+        Return result.ToArray()
+    End Function
+
+    Public Function FindElementByCss(selector As String) As String
+        Return FindElementBy("css selector", selector)
+    End Function
+
+    Public Function FindElementByXpath(selector As String) As String
+        Return FindElementBy("xpath", selector)
+    End Function
+
+    Public Function FindElementById(selector As String) As String
+        Return FindElementBy("id", selector)
+    End Function
+
+    Public Function FindElementByName(selector As String) As String
+        Return FindElementBy("name", selector) 'name="email"
+    End Function
+
+    Public Function FindElementByTagName(selector As String) As String
+        Return FindElementBy("tag name", selector) 'div, input
+    End Function
+
+    Public Function FindElementByLinkText(selector As String) As String
+        Return FindElementBy("link text", selector) 'Exact match of anchor (<a>) text
+    End Function
+
+    Public Function FindElementByPartialLinkText(selector As String) As String
+        Return FindElementBy("partial link text", selector) 'single class name
+    End Function
+
+    Public Function FindElementBy(sUsing As String, selector As String) As String
+        Dim payload = New Dictionary(Of String, Object) From {{"using", sUsing}, {"value", selector}}
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element", "POST", sJson)
+        Dim result = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+        Return result("element-6066-11e4-a52e-4f735466cecf").ToString()
+    End Function
+
+    Public Function GetElementText(elementId As String) As String
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/text", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    Public Function IsElementDisplayed(elementId As String) As Boolean
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/displayed", "GET", "")
+        Return CBool(New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value"))
+    End Function
+
+    Public Function IsElementEnabled(elementId As String) As Boolean
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/enabled", "GET", "")
+        Return CBool(New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value"))
+    End Function
+
+    Public Function IsElementSelected(elementId As String) As Boolean
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/selected", "GET", "")
+        Return CBool(New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value"))
+    End Function
+
+    Public Sub ClearElement(elementId As String)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/clear", "POST", "{}")
+    End Sub
+
+    Public Sub SubmitElement(elementId As String)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/submit", "POST", "{}")
+    End Sub
+
+    Public Function GetCssValue(elementId As String, propertyName As String) As String
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/css/{propertyName}", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    Public Sub SendKeysToElement(elementId As String, keys As String)
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"text", keys},
+        {"value", keys.ToCharArray()}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/value", "POST", sJson)
+    End Sub
+    Public Sub ClickElement(elementId As String)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/click", "POST", "{}")
+    End Sub
+    Public Function GetElementAttribute(elementId As String, attributeName As String) As String
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/attribute/{attributeName}", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    Public Sub PerformActions(rawJson As String)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/actions", "POST", rawJson)
+    End Sub
+
+    Public Sub MoveToElement(elementId As String)
+        Dim json As String = "{" &
+        """actions"":[{" &
+            """type"":""pointer""," &
+            """id"":""mouse""," &
+            """parameters"":{""pointerType"":""mouse""}," &
+            """actions"":[{" &
+                """type"":""pointerMove""," &
+                """origin"":{""element-6066-11e4-a52e-4f735466cecf"":""" & elementId & """}," &
+                """x"":0,""y"":0,""duration"":100" &
+            "}]" &
+        "}]" &
+    "}"
+        PerformActions(json)
+    End Sub
+
+    Public Sub DragAndDrop(sourceId As String, targetId As String)
+        Dim json As String = "{" &
+        """actions"":[{" &
+            """type"":""pointer""," &
+            """id"":""mouse""," &
+            """parameters"":{""pointerType"":""mouse""}," &
+            """actions"":[{" &
+                """type"":""pointerMove""," &
+                """origin"":{""element-6066-11e4-a52e-4f735466cecf"":""" & sourceId & """}," &
+                """x"":0,""y"":0,""duration"":100" &
+            "},{" &
+                """type"":""pointerDown"",""button"":0" &
+            "},{" &
+                """type"":""pointerMove""," &
+                """origin"":{""element-6066-11e4-a52e-4f735466cecf"":""" & targetId & """}," &
+                """x"":0,""y"":0,""duration"":100" &
+            "},{" &
+                """type"":""pointerUp"",""button"":0" &
+            "}]" &
+        "}]" &
+    "}"
+        PerformActions(json)
+    End Sub
+
+
+    ' Uploads file to WebDriver and returns the remote path for input[type="file"]
+    Public Function UploadFile(localPath As String) As String
+        Dim fileBytes = File.ReadAllBytes(localPath)
+        Dim base64 = Convert.ToBase64String(fileBytes)
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"file", base64}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/file", "POST", sJson)
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+    End Function
+
+    ' Uploads file and sends its remote path to a file input element (by element ID)
+    Public Sub UploadFileToElement(localPath As String, elementId As String)
+        Dim remotePath = UploadFile(localPath)
+        SendKeysToElement(elementId, remotePath)
+    End Sub
+
+    ' Shortcut: Uploads file to a file input using HTML id
+    Public Sub UploadFileById(inputId As String, localPath As String)
+        Dim elementId As String = FindElementById(inputId)
+        UploadFileToElement(localPath, elementId)
+    End Sub
+
+    'Chrome DevTools Protocol (CDP) =======================
+    Public Sub SendCdpCommand(command As String, params As Dictionary(Of String, Object))
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"cmd", command},
+        {"params", params}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+    End Sub
+
+    Public Function GetBrowserLogs() As Object()
+        Dim payload = New Dictionary(Of String, Object) From {{"type", "browser"}}
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/log", "POST", sJson)
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+    End Function
+
+    Public Function GetPerformanceMetrics() As Dictionary(Of String, Object)
+        SendCdpCommand("Performance.enable", New Dictionary(Of String, Object))
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"cmd", "Performance.getMetrics"},
+        {"params", New Dictionary(Of String, Object)}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+    End Function
+
+    Public Sub EnableNetworkLogging()
+        SendCdpCommand("Network.enable", New Dictionary(Of String, Object))
+    End Sub
+
+    Public Sub EnableConsoleLogging()
+        SendCdpCommand("Log.enable", New Dictionary(Of String, Object))
+    End Sub
+
+    Public Sub EmulateNetworkConditions(offline As Boolean, latency As Integer, downloadThroughput As Integer, uploadThroughput As Integer)
+        Dim params = New Dictionary(Of String, Object) From {
+        {"offline", offline},
+        {"latency", latency},
+        {"downloadThroughput", downloadThroughput},
+        {"uploadThroughput", uploadThroughput},
+        {"connectionType", "cellular3g"}
+    }
+        SendCdpCommand("Network.emulateNetworkConditions", params)
+    End Sub
+
+    Public Sub EmulateDeviceMetrics(width As Integer, height As Integer, deviceScaleFactor As Double, mobile As Boolean)
+        Dim params = New Dictionary(Of String, Object) From {
+        {"width", width},
+        {"height", height},
+        {"deviceScaleFactor", deviceScaleFactor},
+        {"mobile", mobile}
+    }
+        SendCdpCommand("Emulation.setDeviceMetricsOverride", params)
+    End Sub
+
+    ' Enable Fetch request interception
+    Public Sub EnableRequestInterception()
+        Dim fetchEnableParams = New Dictionary(Of String, Object) From {
+        {"patterns", New Object() {}}
+    }
+        SendCdpCommand("Fetch.enable", fetchEnableParams)
+    End Sub
+
+    ' Capture DOM snapshot for auditing or static analysis
+    Public Function CaptureDomSnapshot() As Object
+        Dim params = New Dictionary(Of String, Object) From {
+        {"computedStyles", New String() {"color", "font-size", "display"}}
+    }
+        SendCdpCommand("DOMSnapshot.enable", New Dictionary(Of String, Object))
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"cmd", "DOMSnapshot.captureSnapshot"},
+        {"params", params}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+    End Function
+
+    ' Start performance trace
+    Public Sub StartPerformanceTrace()
+        Dim params = New Dictionary(Of String, Object) From {
+        {"categories", "devtools.timeline"},
+        {"transferMode", "ReturnAsStream"}
+    }
+        SendCdpCommand("Tracing.start", params)
+    End Sub
+
+    ' Stop performance trace and return base64 stream handle
+    Public Function StopPerformanceTrace() As String
+        Dim payload = New Dictionary(Of String, Object) From {
+        {"cmd", "Tracing.end"},
+        {"params", New Dictionary(Of String, Object)}
+    }
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+        Return resp ' You may parse the response to extract stream handle for trace data
+    End Function
+
+    ' Start precise JS coverage
+    Public Sub EnablePreciseCoverage()
+        SendCdpCommand("Profiler.enable", New Dictionary(Of String, Object))
+        SendCdpCommand("Profiler.startPreciseCoverage", New Dictionary(Of String, Object) From {{"callCount", True}, {"detailed", True}})
+    End Sub
+
+    ' Stop and return JS coverage report
+    Public Function GetPreciseCoverage() As Object
+        Dim result = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", New JavaScriptSerializer().Serialize(New Dictionary(Of String, Object) From {
+        {"cmd", "Profiler.takePreciseCoverage"},
+        {"params", New Dictionary(Of String, Object)}
+    }))
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(result)("value")
+    End Function
+
+
+    '===========================================
     'Private support functions
 
     Private Sub Init()
@@ -137,6 +613,7 @@ Public Class EdgeDriver
         End Using
     End Function
 
+    ' UpdateDriver =====================================
 
     Public Sub UpdateDriver()
         If sEdgeDriverPath = "" Then
@@ -321,11 +798,6 @@ Public Class EdgeDriver
             End Using
         End Using
     End Sub
-
-    Private Function InlineAssignHelper(Of T)(ByRef target As T, value As T) As T
-        target = value
-        Return value
-    End Function
 
     Private Function GetMajorVersion(fullVersion As String) As String
         Dim i = fullVersion.IndexOf("."c)
