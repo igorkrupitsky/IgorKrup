@@ -2,7 +2,7 @@
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
 
         Dim ie As New IgorKrup.EdgeDriver
-        ie.sSharedDownloadFolder = "" '\\pwdb3030\download\Macros\Selenium\Selenium"
+        ie.sSharedDownloadFolder = ""
         ie.UpdateDriver()
         ie.GetUrl("https://google.com")
         Dim r = ie.ExecuteScript("return document.title")

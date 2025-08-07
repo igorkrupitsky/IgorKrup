@@ -126,6 +126,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
+    <Content Include="bin\ICSharpCode.SharpZipLib.dll" />
     <Content Include="Keyboard\Keyboard.cpp" />
     <Content Include="Keyboard\Keyboard.dll" />
     <Content Include="Keyboard\readme.txt" />
