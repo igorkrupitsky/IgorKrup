@@ -18,6 +18,12 @@ Public Class EdgeDriver
     Public sEdgeDriverPath As String = ""
     Public iPort As Integer = 9515
 
+    'No graphical user interface (no window will appear on screen). Web scraping - faster
+    Public Property useHeadless As Boolean = False
+    Public Property acceptInsecureCerts As Boolean = False
+    Public Property unhandledPromptBehavior As String = "" 'dismiss,accept,dismiss and notify,accept and notify,ignore
+    Public Property useCurrentUserProfile As Boolean = True
+
     Dim proc As Process = Nothing
     Dim sessionId As String = ""
 
@@ -25,7 +31,10 @@ Public Class EdgeDriver
         sEdgeDriverPath = GetEdgeDriverPath()
     End Sub
 
-    Public Sub GetUrl(url As String, Optional username As String = "", Optional password As String = "")
+    Public Sub GetUrl(url As String,
+                      Optional username As String = "",
+                      Optional password As String = "",
+                      Optional maxWaitSec As Integer = 60)
         If proc Is Nothing Then
             If sEdgeDriverPath = "" Then
                 MsgBox($"msedgedriver.exe is missing. Run UpdateDriver() or manually download msedgedriver.exe to {AppDomain.CurrentDomain.BaseDirectory} from https://developer.microsoft.com/en-us/microsoft-edge/tools/webdrive")
@@ -45,6 +54,19 @@ Public Class EdgeDriver
         Dim sJson = serializer.Serialize(payload)
 
         SendRequest($"http://localhost:{iPort}/session/{sessionId}/url", "POST", sJson)
+
+        ' Wait until document.readyState = "complete"
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+        While sw.ElapsedMilliseconds < 1000 * maxWaitSec
+            Try
+                Dim readyState = ExecuteScript("return document.readyState").ToString()
+                If readyState = "complete" Then Exit While
+            Catch ex As Exception
+                ' ignore and retry
+            End Try
+            Threading.Thread.Sleep(200)
+        End While
+
     End Sub
 
     Public Function ExecuteScript(sJS As String) As Object
@@ -61,6 +83,7 @@ Public Class EdgeDriver
         Dim oRet As Object = serializer.DeserializeObject(sRetJson)
         Return oRet("value")
     End Function
+
 
     Public Sub SwitchToFrame(identifier As Object)
         Dim serializer As New JavaScriptSerializer()
@@ -197,10 +220,17 @@ Public Class EdgeDriver
         Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/window/handles", "GET", "")
         Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
     End Function
+
     Public Sub SwitchToWindow(windowHandle As String)
         Dim payload = New Dictionary(Of String, Object) From {{"handle", windowHandle}}
         Dim sJson = New JavaScriptSerializer().Serialize(payload)
         SendRequest($"http://localhost:{iPort}/session/{sessionId}/window", "POST", sJson)
+    End Sub
+
+    Public Sub SwitchToLastWindow()
+        Dim oHandleList As String() = GetWindowHandles()
+        Dim lastHandle = oHandleList.Last().ToString()
+        SwitchToWindow(lastHandle)
     End Sub
 
     ' Take screenshot and save to path
@@ -208,6 +238,14 @@ Public Class EdgeDriver
         Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/screenshot", "GET", "")
         Dim base64String = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
         Dim bytes = Convert.FromBase64String(base64String)
+        File.WriteAllBytes(savePath, bytes)
+    End Sub
+
+    Public Sub TakeElementScreenshot(elementId As String, savePath As String)
+        Dim url = $"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/screenshot"
+        Dim resp = SendRequest(url, "GET", "")
+        Dim base64 = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+        Dim bytes = Convert.FromBase64String(base64) 'PNG
         File.WriteAllBytes(savePath, bytes)
     End Sub
 
@@ -284,6 +322,44 @@ Public Class EdgeDriver
         Return result.ToArray()
     End Function
 
+    Public Function FindElementInShadowDomByCss(rootPath As String, finalSelector As String) As String
+        'Dim elId = FindElementInShadowDomByCss("my-host >> inner-host", "input[type='text']")
+
+
+        'driver.GetUrl("about:blank")
+        'window._closedShadows = [];
+        'const originalAttachShadow = Element.prototype.attachShadow;
+        'Element.prototype.attachShadow = function(init) {
+        '  const shadow = originalAttachShadow.call(this, init);
+        '  if (init.mode === 'closed') window._closedShadows.push(shadow);
+        '  return shadow;
+        '}
+
+        Dim js As String = $"return (function() {{
+          let parts = '{rootPath}'.split('>>').map(s => s.trim());
+          let el = document;
+          for (let i = 0; i < parts.length; i++) {{
+            el = el.querySelector(parts[i]);
+            if (!el || !el.shadowRoot) return null;
+            el = el.shadowRoot;
+          }}
+          let finalEl = el.querySelector('{finalSelector}');
+          return finalEl ? finalEl : null;
+        }})();"
+
+        Dim result = ExecuteScript(js)
+
+        If TypeOf result Is Dictionary(Of String, Object) Then
+            Dim dict = CType(result, Dictionary(Of String, Object))
+            If dict.ContainsKey("element-6066-11e4-a52e-4f735466cecf") Then
+                Return dict("element-6066-11e4-a52e-4f735466cecf").ToString()
+            End If
+        End If
+
+        Return ""
+    End Function
+
+
     Public Function FindElementByCss(selector As String) As String
         Return FindElementBy("css selector", selector)
     End Function
@@ -313,11 +389,42 @@ Public Class EdgeDriver
     End Function
 
     Public Function FindElementBy(sUsing As String, selector As String) As String
-        Dim payload = New Dictionary(Of String, Object) From {{"using", sUsing}, {"value", selector}}
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element", "POST", sJson)
-        Dim result = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
-        Return result("element-6066-11e4-a52e-4f735466cecf").ToString()
+        Try
+            Dim payload = New Dictionary(Of String, Object) From {{"using", sUsing}, {"value", selector}}
+            Dim sJson = New JavaScriptSerializer().Serialize(payload)
+            Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element", "POST", sJson)
+            Dim result = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+            Return result("element-6066-11e4-a52e-4f735466cecf").ToString()
+        Catch ex As Exception
+            Return ""
+        End Try
+    End Function
+
+    Public Function WaitForElementById(selector As String, timeoutMs As Integer) As String
+        Return WaitForElement("id", selector, timeoutMs)
+    End Function
+
+    Public Function WaitForElementByCss(selector As String, timeoutMs As Integer) As String
+        Return WaitForElement("css selector", selector, timeoutMs)
+    End Function
+
+    Public Function WaitForElementByXpath(selector As String, timeoutMs As Integer) As String
+        Return WaitForElement("xpath", selector, timeoutMs)
+    End Function
+
+    Private Function WaitForElement(sUsing As String, selector As String, timeoutMs As Integer) As String
+        Dim sw As Stopwatch = Stopwatch.StartNew()
+
+        Do
+            Dim sElementId = FindElementBy(sUsing, selector)
+            If sElementId <> "" Then
+                Return sElementId
+            End If
+
+            Threading.Thread.Sleep(200)
+        Loop While sw.ElapsedMilliseconds <timeoutMs
+
+        Throw New Exception($"Timeout waiting for element: using={sUsing}, selector={selector}")
     End Function
 
     Public Function GetElementText(elementId As String) As String
@@ -438,6 +545,15 @@ Public Class EdgeDriver
         UploadFileToElement(localPath, elementId)
     End Sub
 
+    Public Function CreateNewTab(Optional url As String = "about:blank") As String
+        Dim parameters As New Dictionary(Of String, Object) From {{"url", url}}
+        Dim payload = New Dictionary(Of String, Object) From {{"cmd", "Target.createTarget"}, {"params", parameters}}
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim response = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command_and_get_result", "POST", sJson)
+        Dim parsed = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(response)
+        Return parsed("value")("targetId").ToString()
+    End Function
+
     'Chrome DevTools Protocol (CDP) =======================
     Public Sub SendCdpCommand(command As String, params As Dictionary(Of String, Object))
         Dim payload = New Dictionary(Of String, Object) From {
@@ -446,6 +562,19 @@ Public Class EdgeDriver
     }
         Dim sJson = New JavaScriptSerializer().Serialize(payload)
         SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+    End Sub
+
+    Public Sub SetDownloadDirectory(downloadPath As String)
+        Dim params = New Dictionary(Of String, Object) From {
+        {"behavior", "allow"},
+        {"downloadPath", downloadPath}
+    }
+        SendCdpCommand("Page.setDownloadBehavior", params)
+    End Sub
+
+    Public Sub AttachToTab(targetId As String)
+        Dim parameters As New Dictionary(Of String, Object) From {{"targetId", targetId}, {"flatten", True}}
+        SendCdpCommand("Target.attachToTarget", parameters)
     End Sub
 
     Public Function GetBrowserLogs() As Object()
@@ -558,6 +687,18 @@ Public Class EdgeDriver
     'Private support functions
 
     Private Sub Init()
+
+        If useCurrentUserProfile Then
+            'Make sure current Profile is not in use
+            For Each p As Process In Process.GetProcessesByName("msedge")
+                Try
+                    p.Kill()
+                Catch ex As Exception
+                    Console.WriteLine("Could not kill process: " & ex.Message)
+                End Try
+            Next
+        End If
+
         proc = New Process()
         proc.StartInfo.FileName = sEdgeDriverPath
         proc.StartInfo.Arguments = "--port=" & iPort
@@ -573,10 +714,59 @@ Public Class EdgeDriver
             Return
         End If
 
-        Dim sessionJson As String = "{""capabilities"": {""alwaysMatch"": {""browserName"": ""MicrosoftEdge""}}}"
-        Dim sessionResponse = SendRequest($"http://localhost:{iPort}/session", "POST", sessionJson)
-        sessionId = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(sessionResponse)("value")("sessionId").ToString()
+        ' Build ms:edgeOptions.args
+        Dim edgeArgs As New List(Of String)
+        If useHeadless Then
+            edgeArgs.Add("--headless")
+            edgeArgs.Add("--disable-gpu")
+        End If
+
+        If useCurrentUserProfile Then
+            Dim username As String = Environment.UserName
+            Dim profilePath As String = $"C:\Users\{username}\AppData\Local\Microsoft\Edge\User Data"
+
+            If Directory.Exists(profilePath) Then
+                Dim escapedPath As String = profilePath.Replace("\", "\\")
+                edgeArgs.Add("--user-data-dir=" & escapedPath)
+                edgeArgs.Add("--profile-directory=Default")
+            Else
+                Console.WriteLine("Warning: Edge profile path not found for user: " & username)
+            End If
+        End If
+
+        ' Build args JSON
+        Dim argsJson As String = ""
+        For Each arg As String In edgeArgs
+            If argsJson <> "" Then argsJson += ","
+            argsJson += """" & arg & """"
+        Next
+
+        ' Final session JSON
+        Dim sessionJson As String =
+        "{""capabilities"":{""alwaysMatch"":{" &
+            """browserName"":""MicrosoftEdge""" &
+            If(acceptInsecureCerts, ",""acceptInsecureCerts"":true", "") &
+            If(Not String.IsNullOrEmpty(unhandledPromptBehavior), ",""unhandledPromptBehavior"":""" & unhandledPromptBehavior & """", "") &
+            If(argsJson <> "", ",""ms:edgeOptions"":{""args"":[" & argsJson & "]}", "") &
+        "}}}"
+
+        Try
+            Dim sessionResponse = SendRequest($"http://localhost:{iPort}/session", "POST", sessionJson)
+            sessionId = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(sessionResponse)("value")("sessionId").ToString()
+        Catch ex As WebException
+            Console.WriteLine("Session JSON:")
+            Console.WriteLine(sessionJson)
+
+            Using reader As New StreamReader(ex.Response.GetResponseStream())
+                Dim errorDetails As String = reader.ReadToEnd()
+                Console.WriteLine("WebDriver error response: " & errorDetails)
+            End Using
+
+            Throw ex
+        End Try
+
     End Sub
+
 
     Private Function WaitForDriver(url As String, timeoutMs As Integer) As Boolean
         Dim sw = Stopwatch.StartNew()
