@@ -251,28 +251,27 @@ Public Class EdgeDriver
 
     Public Sub CaptureFullPageScreenshot(savePath As String)
         Dim metrics = GetWindowSize()
+
+        Dim clipParams As New Dictionary(Of String, Object) From {
+        {"x", 0},
+        {"y", 0},
+        {"width", metrics("width")},
+        {"height", metrics("height")},
+        {"scale", 1.0}
+    }
+
         Dim params = New Dictionary(Of String, Object) From {
         {"format", "png"},
         {"fromSurface", True},
-        {"clip", New Dictionary(Of String, Object) From {
-            {"x", 0},
-            {"y", 0},
-            {"width", metrics("width")},
-            {"height", metrics("height")},
-            {"scale", 1.0}
-        }}
+        {"clip", clipParams}
     }
-        Dim payload = New Dictionary(Of String, Object) From {
-        {"cmd", "Page.captureScreenshot"},
-        {"params", params}
-    }
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
-        Dim base64 = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")("data").ToString()
+
+        Dim result = SendCdpCommand("Page.captureScreenshot", params)
+        Dim base64 As String = result("data").ToString()
+
         Dim bytes = Convert.FromBase64String(base64)
         File.WriteAllBytes(savePath, bytes)
     End Sub
-
 
     Public Function FindElementsByCss(selector As String) As String()
         Return FindElementsBy("css selector", selector)
@@ -476,6 +475,28 @@ Public Class EdgeDriver
         Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
     End Function
 
+    Public Function GetElementRect(elementId As String) As Dictionary(Of String, Object)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/rect", "GET", "")
+        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+    End Function
+
+    Public Function IsElementStale(elementId As String) As Boolean
+        Try
+            ' Any basic call will work – we use GetElementAttribute as a probe
+            GetElementAttribute(elementId, "id")
+            Return False
+        Catch ex As WebException
+            If TypeOf ex.Response Is HttpWebResponse Then
+                Dim response = CType(ex.Response, HttpWebResponse)
+                If response.StatusCode = HttpStatusCode.NotFound Then
+                    ' Indicates a stale element reference
+                    Return True
+                End If
+            End If
+            Throw ' Rethrow for unexpected errors
+        End Try
+    End Function
+
     Public Sub PerformActions(rawJson As String)
         SendRequest($"http://localhost:{iPort}/session/{sessionId}/actions", "POST", rawJson)
     End Sub
@@ -555,15 +576,21 @@ Public Class EdgeDriver
     End Function
 
     'Chrome DevTools Protocol (CDP) =======================
-    Public Sub SendCdpCommand(command As String, params As Dictionary(Of String, Object))
+    ' Already updated: SendCdpCommand returns the "value" directly
+    Public Function SendCdpCommand(command As String, params As Dictionary(Of String, Object)) As Object
         Dim payload = New Dictionary(Of String, Object) From {
         {"cmd", command},
         {"params", params}
     }
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
-    End Sub
 
+        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+
+        Dim result = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)
+        Return result("value")
+    End Function
+
+    ' Updated to use new SendCdpCommand
     Public Sub SetDownloadDirectory(downloadPath As String)
         Dim params = New Dictionary(Of String, Object) From {
         {"behavior", "allow"},
@@ -573,25 +600,19 @@ Public Class EdgeDriver
     End Sub
 
     Public Sub AttachToTab(targetId As String)
-        Dim parameters As New Dictionary(Of String, Object) From {{"targetId", targetId}, {"flatten", True}}
+        Dim parameters As New Dictionary(Of String, Object) From {
+        {"targetId", targetId},
+        {"flatten", True}
+    }
         SendCdpCommand("Target.attachToTarget", parameters)
     End Sub
 
     Public Function GetBrowserLogs() As Object()
-        Dim payload = New Dictionary(Of String, Object) From {{"type", "browser"}}
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/log", "POST", sJson)
-        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
-    End Function
-
-    Public Function GetPerformanceMetrics() As Dictionary(Of String, Object)
-        SendCdpCommand("Performance.enable", New Dictionary(Of String, Object))
         Dim payload = New Dictionary(Of String, Object) From {
-        {"cmd", "Performance.getMetrics"},
-        {"params", New Dictionary(Of String, Object)}
+        {"type", "browser"}
     }
         Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
+        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/log", "POST", sJson)
         Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
     End Function
 
@@ -624,7 +645,6 @@ Public Class EdgeDriver
         SendCdpCommand("Emulation.setDeviceMetricsOverride", params)
     End Sub
 
-    ' Enable Fetch request interception
     Public Sub EnableRequestInterception()
         Dim fetchEnableParams = New Dictionary(Of String, Object) From {
         {"patterns", New Object() {}}
@@ -632,22 +652,14 @@ Public Class EdgeDriver
         SendCdpCommand("Fetch.enable", fetchEnableParams)
     End Sub
 
-    ' Capture DOM snapshot for auditing or static analysis
     Public Function CaptureDomSnapshot() As Object
+        SendCdpCommand("DOMSnapshot.enable", New Dictionary(Of String, Object))
         Dim params = New Dictionary(Of String, Object) From {
         {"computedStyles", New String() {"color", "font-size", "display"}}
     }
-        SendCdpCommand("DOMSnapshot.enable", New Dictionary(Of String, Object))
-        Dim payload = New Dictionary(Of String, Object) From {
-        {"cmd", "DOMSnapshot.captureSnapshot"},
-        {"params", params}
-    }
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
-        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value")
+        Return SendCdpCommand("DOMSnapshot.captureSnapshot", params)
     End Function
 
-    ' Start performance trace
     Public Sub StartPerformanceTrace()
         Dim params = New Dictionary(Of String, Object) From {
         {"categories", "devtools.timeline"},
@@ -656,31 +668,27 @@ Public Class EdgeDriver
         SendCdpCommand("Tracing.start", params)
     End Sub
 
-    ' Stop performance trace and return base64 stream handle
     Public Function StopPerformanceTrace() As String
-        Dim payload = New Dictionary(Of String, Object) From {
-        {"cmd", "Tracing.end"},
-        {"params", New Dictionary(Of String, Object)}
-    }
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", sJson)
-        Return resp ' You may parse the response to extract stream handle for trace data
+        Dim result = SendCdpCommand("Tracing.end", New Dictionary(Of String, Object))
+        ' If additional parsing is needed from the result, do it here
+        Return New JavaScriptSerializer().Serialize(result)
     End Function
+
+    Public Function GetPerformanceMetrics() As Dictionary(Of String, Object)
+        SendCdpCommand("Performance.enable", New Dictionary(Of String, Object))
+        Return CType(SendCdpCommand("Performance.getMetrics", New Dictionary(Of String, Object)), Dictionary(Of String, Object))
+    End Function
+
+    Public Function GetPreciseCoverage() As Object
+        Return SendCdpCommand("Profiler.takePreciseCoverage", New Dictionary(Of String, Object))
+    End Function
+
 
     ' Start precise JS coverage
     Public Sub EnablePreciseCoverage()
         SendCdpCommand("Profiler.enable", New Dictionary(Of String, Object))
         SendCdpCommand("Profiler.startPreciseCoverage", New Dictionary(Of String, Object) From {{"callCount", True}, {"detailed", True}})
     End Sub
-
-    ' Stop and return JS coverage report
-    Public Function GetPreciseCoverage() As Object
-        Dim result = SendRequest($"http://localhost:{iPort}/session/{sessionId}/chromium/send_command", "POST", New JavaScriptSerializer().Serialize(New Dictionary(Of String, Object) From {
-        {"cmd", "Profiler.takePreciseCoverage"},
-        {"params", New Dictionary(Of String, Object)}
-    }))
-        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(result)("value")
-    End Function
 
 
     '===========================================
