@@ -2,13 +2,44 @@
 
 A Windows automation and utility library for .NET, providing COM-accessible controls for UI automation, PDF manipulation, video recording, and keyboard input injection. 
 
+
 ## Features
 
 - **UI Automation**: Control windows, send keystrokes, mouse events, and automate UI tasks (see `Control.vb`).
 - **PDF Tools**: Extract pages and count pages in PDF files using iTextSharp (see `PDF.vb`).
 - **Video Recording**: Record desktop or window video using FFmpeg (see `VideoRecorder.vb`).
 - **Keyboard Injection**: Low-level keyboard input via a native DLL (`Keyboard.dll`).
+- **Edge Browser Automation**: Automate Microsoft Edge browser using a built-in WebDriver client (see `EdgeDriver.vb`).
 - **COM Registration**: Register .NET classes for COM automation via `RegKrupReg.vbs`.
+
+## EdgeDriver (Web Automation)
+
+`EdgeDriver.vb` provides a COM-accessible automation interface for Microsoft Edge, similar to SeleniumBasic but with local-user registration support. It can:
+
+- Launch and control Edge browser sessions (headless or visible)
+- Navigate to URLs, fill forms, click elements, and execute JavaScript
+- Find elements by CSS, XPath, ID, name, tag, class, and link text
+- Take screenshots (full page or element)
+- Download and update the correct version of `msedgedriver.exe` automatically
+- Use Chrome DevTools Protocol (CDP) for advanced features (network, performance, device emulation, etc.)
+- Upload files to file inputs
+- Handle alerts, cookies, and browser windows/tabs
+
+### Usage Example (VBScript)
+
+```vbscript
+Set edge = CreateObject("IgorKrup.EdgeDriver")
+edge.GetUrl "https://www.example.com"
+Dim elId : elId = edge.FindElementByCss("input[name='q']")
+edge.SendKeysToElement elId, "Hello world!"
+edge.TakeScreenshot "C:\\screenshot.png"
+edge.Quit
+```
+
+### Notes
+- Place the correct `msedgedriver.exe` in your output directory, or use `UpdateDriver()` to download it automatically.
+- EdgeDriver supports both visible and headless modes (set `useHeadless` property).
+- For advanced automation, use methods like `ExecuteScript`, `SendCdpCommand`, and element search helpers.
 
 ## Project Structure
 
@@ -50,9 +81,6 @@ To use the library via COM (e.g., from VBScript):
 Set pdf = CreateObject("IgorKrup.PDF")
 WScript.Echo "Pages: " & pdf.PageCount("C:\\test.pdf")
 pdf.ExtractPage "C:\\test.pdf", "C:\\page1.pdf", 1
-
-Set ctrl = CreateObject("IgorKrup.Control")
-ctrl.Run "notepad.exe"
 ```
 
 ## Notes
