@@ -8,5 +8,5 @@ C:\Users\80014379\source\repos\IgorKrup\obj\Debug\IgorKrup.vbproj.CoreCompileInp
 C:\Users\80014379\source\repos\IgorKrup\obj\Debug\IgorKrup.vbproj.CopyComplete
 C:\Users\80014379\source\repos\IgorKrup\obj\Debug\IgorKrup.dll
 C:\Users\80014379\source\repos\IgorKrup\obj\Debug\IgorKrup.pdb
-C:\Users\80014379\source\repos\IgorKrup\obj\Debug\IgorKrup.vbproj.AssemblyReference.cache
 C:\Users\80014379\source\repos\IgorKrup\bin\Debug\ICSharpCode.SharpZipLib.dll
+C:\Users\80014379\source\repos\IgorKrup\obj\Debug\IgorKrup.vbproj.AssemblyReference.cache

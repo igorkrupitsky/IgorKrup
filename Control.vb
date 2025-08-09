@@ -11,6 +11,8 @@ Public Class Control
 
     ' === Enums and Constants ===
     Public winTitleMatchMode As Integer = 1 ' 1: starts with, 2: contains, 3: exact, 4: regex
+    Public openAiApiKey As String = "" ' Environment.GetEnvironmentVariable("OPENAI_API_KEY")
+
     Private sendKeyDelay As Integer = 0
     Private Shared ReadOnly INPUT_SIZE As Integer = Marshal.SizeOf(GetType(INPUT))
 
@@ -126,6 +128,12 @@ Public Class Control
 
     Private lastWindowHandle As IntPtr = IntPtr.Zero
 
+    Public Sub New()
+        openAiApiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") & ""
+        'setx OPENAI_API_KEY "sk-yourkeyhere"
+        'System.Configuration.ConfigurationManager.AppSettings("OPENAI_API_KEY")
+    End Sub
+
     Public Function WinExists(titleHint As String) As Boolean
         lastWindowHandle = FindWindowByTitleHint(titleHint)
         Return lastWindowHandle <> IntPtr.Zero
@@ -141,25 +149,53 @@ Public Class Control
     End Sub
 
     Public Function WinWait(titleHint As String, Optional textHint As String = "", Optional timeoutSec As Integer = 0) As Boolean
-        'https://www.autoitscript.com/autoit3/docs/functions/WinWait.htm
+        ' Wait for window to exist, then activate and wait for it to become active
         Dim sw As New Stopwatch()
         sw.Start()
         Do
-            If WinExists(titleHint) Then Return True
+            If WinExists(titleHint) Then
+                WinActivate(titleHint)
+                Return True
+            End If
             Thread.Sleep(250)
         Loop While sw.ElapsedMilliseconds < timeoutSec * 1000 Or timeoutSec = 0
         Return False
     End Function
 
-    Public Sub WinWaitActive(titleHint As String, Optional timeoutMs As Integer = 5000)
+    Public Function WinWaitClose(titleHint As String, Optional timeoutSec As Integer = 0) As Boolean
+        ' Waits until the specified window is closed or timeout elapses.
+        ' Returns True if the window was closed, False if timed out.
+
+        Dim sw As New Stopwatch()
+        sw.Start()
+
+        Do
+            If Not WinExists(titleHint) Then
+                Return True ' Window is gone
+            End If
+
+            Thread.Sleep(250)
+
+            ' If timeoutSec is 0, wait forever
+            If timeoutSec > 0 AndAlso sw.Elapsed.TotalSeconds >= timeoutSec Then
+                Exit Do
+            End If
+        Loop
+
+        Return False ' Timed out
+    End Function
+
+
+    Public Function WinWaitActive(titleHint As String, Optional timeoutSec As Integer = 5) As Boolean
         WinActivate(titleHint)
         Dim sw As New Stopwatch()
         sw.Start()
-        Do While sw.ElapsedMilliseconds < timeoutMs
-            If GetForegroundWindow() = lastWindowHandle Then Exit Sub
+        Do While sw.ElapsedMilliseconds < timeoutSec * 1000
+            If GetForegroundWindow() = lastWindowHandle Then Return True
             Thread.Sleep(100)
         Loop
-    End Sub
+        Return False
+    End Function
 
     Public Sub WinClose(titleHint As String)
         Dim hWnd = FindWindowByTitleHint(titleHint)
@@ -207,6 +243,13 @@ Public Class Control
         Dim r = GetWindowRectFor(titleHint)
         Return r.Bottom - r.Top
     End Function
+
+    Public Function WinGetPos(titleHint As String) As Integer()
+        Dim r = GetWindowRectFor(titleHint)
+        Return {r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top}
+    End Function
+
+    'Return New Object() {x + sx, y + sy, bmpSearch.Width, bmpSearch.Height}
 
     Public Sub MouseClick(button As String, x As Integer, y As Integer)
         SetCursorPos(x, y)
@@ -649,6 +692,24 @@ Public Class Control
         bmp.Save(filePath, System.Drawing.Imaging.ImageFormat.Png)
     End Sub
 
+    Public Function SearchImage2(imagePath As String, winPos As Object, tolerance As Integer, Optional returnCenter As Boolean = False) As Object
+        If winPos Is Nothing Then Return Nothing
+
+        Dim arr As System.Array = TryCast(winPos, System.Array)
+        If arr Is Nothing OrElse arr.Rank <> 1 OrElse arr.Length < 4 Then Return Nothing
+
+        Dim lb As Integer = arr.GetLowerBound(0)
+
+        Dim x As Integer = CInt(arr.GetValue(lb + 0))
+        Dim y As Integer = CInt(arr.GetValue(lb + 1))
+        Dim w As Integer = CInt(arr.GetValue(lb + 2))
+        Dim h As Integer = CInt(arr.GetValue(lb + 3))
+
+        If w <= 0 OrElse h <= 0 Then Return Nothing ' avoid GDI+ ArgumentException
+
+        Return SearchImage(imagePath, x, y, w, h, tolerance, returnCenter)
+    End Function
+
     Public Function SearchImage(imagePath As String, x As Integer, y As Integer, width As Integer, height As Integer,
                                 tolerance As Integer, Optional returnCenter As Boolean = False) As Object
 
@@ -700,6 +761,28 @@ Public Class Control
         Return Math.Abs(Int(c1.R) - Int(c2.R)) <= tolerance AndAlso
                Math.Abs(Int(c1.G) - Int(c2.G)) <= tolerance AndAlso
                Math.Abs(Int(c1.B) - Int(c2.B)) <= tolerance
+    End Function
+
+    ' Overload for FindTextOnScreen that accepts WinGetPos array
+    Public Function FindTextOnScreen2(winPos As Integer(), searchText As String,
+                                     Optional tessdataPath As String = "", Optional lang As String = "eng",
+                                     Optional returnCenter As Boolean = False) As Object
+
+        If winPos Is Nothing Then Return Nothing
+
+        Dim arr As System.Array = TryCast(winPos, System.Array)
+        If arr Is Nothing OrElse arr.Rank <> 1 OrElse arr.Length < 4 Then Return Nothing
+
+        Dim lb As Integer = arr.GetLowerBound(0)
+
+        Dim x As Integer = CInt(arr.GetValue(lb + 0))
+        Dim y As Integer = CInt(arr.GetValue(lb + 1))
+        Dim w As Integer = CInt(arr.GetValue(lb + 2))
+        Dim h As Integer = CInt(arr.GetValue(lb + 3))
+
+        If w <= 0 OrElse h <= 0 Then Return Nothing ' avoid GDI+ ArgumentException
+
+        Return FindTextOnScreen(x, y, w, h, searchText, tessdataPath, lang, returnCenter)
     End Function
 
     Public Function FindTextOnScreen(screenX As Integer, screenY As Integer, width As Integer, height As Integer, searchText As String,
@@ -811,5 +894,117 @@ Public Class Control
 
         Return ""
     End Function
+
+
+
+
+
+
+
+    Public Function Vision_TextboxFocused(imagePath As String, ByRef bbox As Integer()) As Boolean
+        Using bmp As New Bitmap(imagePath)
+            Return Vision_TextboxFocused(bmp, bbox)
+        End Using
+    End Function
+
+    Public Function Vision_TextboxFocused(bmp As Bitmap, ByRef bbox As Integer()) As Boolean
+        bbox = Nothing
+        Dim dataUrl = BitmapToDataUrlPng(bmp)
+
+        Dim prompt As String =
+            "Analyze this UI screenshot and return ONLY valid JSON:
+        { ""textbox_focused"": boolean, ""textbox_bbox"": [x,y,w,h] or null }
+        Rules:
+        - ""textbox_focused"" is true only if the text caret is inside a textbox OR the textbox clearly shows focused/active styling.
+        - ""textbox_bbox"" are absolute screen coordinates [x,y,w,h] of the active textbox, else null."
+
+        Dim obj = Vision_RequestJson(dataUrl, "gpt-4o", prompt)
+        If obj Is Nothing Then Return False
+
+        Dim focused As Boolean = False
+        If obj.ContainsKey("textbox_focused") Then
+            Try : focused = Convert.ToBoolean(obj("textbox_focused")) : Catch : focused = False : End Try
+        End If
+
+        If obj.ContainsKey("textbox_bbox") AndAlso Not obj("textbox_bbox") Is Nothing Then
+            Dim arr = TryCast(obj("textbox_bbox"), Object())
+            If arr Is Nothing Then
+                Dim al = TryCast(obj("textbox_bbox"), System.Collections.ArrayList)
+                If Not al Is Nothing Then arr = al.ToArray()
+            End If
+            If Not arr Is Nothing AndAlso arr.Length = 4 Then
+                Try
+                    bbox = New Integer() {CInt(arr(0)), CInt(arr(1)), CInt(arr(2)), CInt(arr(3))}
+                Catch
+                    bbox = Nothing
+                End Try
+            End If
+        End If
+
+        Return focused
+    End Function
+
+    Private Function Vision_RequestJson(imageDataUrl As String, model As String, prompt As String) As Dictionary(Of String, Object)
+        Dim jss As New System.Web.Script.Serialization.JavaScriptSerializer()
+
+        ' Payload for Chat Completions with image input
+        Dim payloadObj As Object = New Dictionary(Of String, Object) From {
+            {"model", model},
+            {"response_format", New Dictionary(Of String, Object) From {{"type", "json_object"}}},
+            {"messages", New Object() {
+                New Dictionary(Of String, Object) From {
+                    {"role", "user"},
+                    {"content", New Object() {
+                        New Dictionary(Of String, Object) From {{"type", "text"}, {"text", prompt}},
+                        New Dictionary(Of String, Object) From {
+                            {"type", "image_url"},
+                            {"image_url", New Dictionary(Of String, Object) From {{"url", imageDataUrl}}}
+                        }
+                    }}
+                }
+            }}
+        }
+        Dim payload As String = jss.Serialize(payloadObj)
+
+        ' TLS 1.2 shim (if available on OS)
+        Try : System.Net.ServicePointManager.SecurityProtocol = CType(3072, System.Net.SecurityProtocolType) : Catch : End Try
+
+        Dim req As System.Net.HttpWebRequest = CType(System.Net.WebRequest.Create("https://api.openai.com/v1/chat/completions"), System.Net.HttpWebRequest)
+        req.Method = "POST"
+        req.ContentType = "application/json"
+        req.Headers(System.Net.HttpRequestHeader.Authorization) = "Bearer " & openAiApiKey
+
+        Dim bytes = Encoding.UTF8.GetBytes(payload)
+        Using rs = req.GetRequestStream()
+            rs.Write(bytes, 0, bytes.Length)
+        End Using
+
+        Dim respText As String
+        Using resp = CType(req.GetResponse(), System.Net.HttpWebResponse)
+            Using sr As New IO.StreamReader(resp.GetResponseStream(), Encoding.UTF8)
+                respText = sr.ReadToEnd()
+            End Using
+        End Using
+
+        ' Parse OpenAI envelope -> choices[0].message.content (our JSON string)
+        Dim env = CType(jss.DeserializeObject(respText), Dictionary(Of String, Object))
+        Dim choices = CType(env("choices"), Object())
+        If choices Is Nothing OrElse choices.Length = 0 Then Return Nothing
+
+        Dim msg = CType(CType(choices(0), Dictionary(Of String, Object))("message"), Dictionary(Of String, Object))
+        Dim content As String = CStr(msg("content"))
+        If String.IsNullOrEmpty(content) Then Return Nothing
+
+        ' Parse the JSON string the model returned
+        Return CType(jss.DeserializeObject(content), Dictionary(Of String, Object))
+    End Function
+
+    Private Function BitmapToDataUrlPng(bmp As Bitmap) As String
+        Using ms As New IO.MemoryStream()
+            bmp.Save(ms, Imaging.ImageFormat.Png)
+            Return "data:image/png;base64," & Convert.ToBase64String(ms.ToArray())
+        End Using
+    End Function
+
 
 End Class
