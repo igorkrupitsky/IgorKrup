@@ -9,7 +9,7 @@ Imports System.Runtime.InteropServices
 <ComVisible(True), ClassInterface(ClassInterfaceType.AutoDual)>
 Public Class PDF
 
-    Function PageCount(ByVal sInPdf As String) As Integer
+    Public Function PageCount(ByVal sInPdf As String) As Integer
         Dim doc As PdfReader = Nothing
         Try
             doc = New PdfReader(sInPdf)
@@ -19,7 +19,7 @@ Public Class PDF
         End Try
     End Function
 
-    Sub ExtractPage(ByVal sInFilePath As String, ByVal sOutFilePath As String, iPage As Integer)
+    Public Sub ExtractPage(ByVal sInFilePath As String, ByVal sOutFilePath As String, iPage As Integer)
         Dim oPdfReader As PdfReader = Nothing
         Dim oPdfDoc As Document = Nothing
         Dim oPdfWriter As PdfWriter = Nothing
@@ -48,7 +48,7 @@ Public Class PDF
         End Try
     End Sub
 
-    Function GetFileText(ByVal sInPdf As String) As String
+    Public Function GetFileText(ByVal sInPdf As String) As String
         Dim doc As New iTextSharp.text.pdf.PdfReader(sInPdf)
         Dim sb As New System.Text.StringBuilder()
 
@@ -81,7 +81,7 @@ Public Class PDF
         Return sb.ToString()
     End Function
 
-    Function GetPageText(ByVal sInPdf As String, iPage As Integer) As String
+    Public Function GetPageText(ByVal sInPdf As String, iPage As Integer) As String
         Dim doc As New iTextSharp.text.pdf.PdfReader(sInPdf)
         Dim sb As New System.Text.StringBuilder()
         Dim pg As iTextSharp.text.pdf.PdfDictionary = doc.GetPageN(iPage)
@@ -113,7 +113,7 @@ Public Class PDF
     End Function
 
 
-    Sub MergeFileInFolder(ByVal sFolderPath As String,
+    Public Sub MergeFilesInFolder(ByVal sFolderPath As String,
                           ByVal sOutFilePath As String,
                           ByVal bResize As Boolean,
                           Optional sFileType As String = "All")
@@ -188,7 +188,7 @@ Public Class PDF
     End Sub
 
 
-    Sub AddPdf(ByVal sInFilePath As String, ByRef oPdfDoc As iTextSharp.text.Document,
+    Private Sub AddPdf(ByVal sInFilePath As String, ByRef oPdfDoc As iTextSharp.text.Document,
                ByRef oPdfWriter As PdfWriter, bResize As Boolean)
 
         Dim oDirectContent As iTextSharp.text.pdf.PdfContentByte = oPdfWriter.DirectContent
@@ -241,7 +241,7 @@ Public Class PDF
 
     End Sub
 
-    Sub AddImage(ByVal sInFilePath As String, ByRef oPdfDoc As iTextSharp.text.Document,
+    Private Sub AddImage(ByVal sInFilePath As String, ByRef oPdfDoc As iTextSharp.text.Document,
                  ByRef oPdfWriter As PdfWriter, ByVal sExt As String, bResize As Boolean)
 
 
@@ -279,8 +279,7 @@ Public Class PDF
 
     End Sub
 
-
-    Sub AddImage2(ByRef oImage As System.Drawing.Image, ByRef oPdfDoc As iTextSharp.text.Document, ByRef oPdfWriter As PdfWriter)
+    Private Sub AddImage2(ByRef oImage As System.Drawing.Image, ByRef oPdfDoc As iTextSharp.text.Document, ByRef oPdfWriter As PdfWriter)
 
         Dim oDirectContent As iTextSharp.text.pdf.PdfContentByte = oPdfWriter.DirectContent
         Dim oPdfImage As iTextSharp.text.Image

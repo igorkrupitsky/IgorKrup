@@ -221,9 +221,9 @@ Public Class Control
         Return sb.ToString()
     End Function
 
-    Public Function WinGetHandle(titleHint As String) As String
+    Public Function WinGetHandle(titleHint As String) As Long
         Dim hWnd = FindWindowByTitleHint(titleHint)
-        Return hWnd.ToInt64().ToString("X")
+        Return hWnd.ToInt64()
     End Function
 
     Public Function WinGetPosX(titleHint As String) As Integer
@@ -692,22 +692,53 @@ Public Class Control
         bmp.Save(filePath, System.Drawing.Imaging.ImageFormat.Png)
     End Sub
 
-    Public Function SearchImage2(imagePath As String, winPos As Object, tolerance As Integer, Optional returnCenter As Boolean = False) As Object
-        If winPos Is Nothing Then Return Nothing
+
+    Public Function FindTextOnScreen2(winPos As Integer(), searchText As String,
+                                  Optional tessdataPath As String = "", Optional lang As String = "eng",
+                                  Optional returnCenter As Boolean = False) As Object
+        Dim x As Integer, y As Integer, w As Integer, h As Integer
+        If Not TryExtractRect(winPos, x, y, w, h) Then Return Nothing
+        Return FindTextOnScreen(x, y, w, h, searchText, tessdataPath, lang, returnCenter)
+    End Function
+
+    Public Function SearchImage2(imagePath As String, winPos As Object, tolerance As Integer,
+                             Optional returnCenter As Boolean = False) As Object
+        Dim x As Integer, y As Integer, w As Integer, h As Integer
+        If Not TryExtractRect(winPos, x, y, w, h) Then Return Nothing
+        Return SearchImage(imagePath, x, y, w, h, tolerance, returnCenter)
+    End Function
+
+    Private Function TryExtractRect(winPos As Object,
+                                ByRef x As Integer, ByRef y As Integer,
+                                ByRef w As Integer, ByRef h As Integer) As Boolean
+        x = 0 : y = 0 : w = 0 : h = 0
+        If winPos Is Nothing Then Return False
+
+        If TypeOf winPos Is Drawing.Rectangle Then
+            Dim r = DirectCast(winPos, Drawing.Rectangle)
+            x = r.X : y = r.Y : w = r.Width : h = r.Height
+            Return (w > 0 AndAlso h > 0)
+        End If
 
         Dim arr As System.Array = TryCast(winPos, System.Array)
-        If arr Is Nothing OrElse arr.Rank <> 1 OrElse arr.Length < 4 Then Return Nothing
+        If arr Is Nothing OrElse arr.Rank <> 1 OrElse arr.Length < 4 Then Return False
 
-        Dim lb As Integer = arr.GetLowerBound(0)
+        Dim lb = arr.GetLowerBound(0)
+        If Not ToInt(arr.GetValue(lb + 0), x) Then Return False
+        If Not ToInt(arr.GetValue(lb + 1), y) Then Return False
+        If Not ToInt(arr.GetValue(lb + 2), w) Then Return False
+        If Not ToInt(arr.GetValue(lb + 3), h) Then Return False
 
-        Dim x As Integer = CInt(arr.GetValue(lb + 0))
-        Dim y As Integer = CInt(arr.GetValue(lb + 1))
-        Dim w As Integer = CInt(arr.GetValue(lb + 2))
-        Dim h As Integer = CInt(arr.GetValue(lb + 3))
+        Return (w > 0 AndAlso h > 0)
+    End Function
 
-        If w <= 0 OrElse h <= 0 Then Return Nothing ' avoid GDI+ ArgumentException
-
-        Return SearchImage(imagePath, x, y, w, h, tolerance, returnCenter)
+    Private Function ToInt(o As Object, ByRef v As Integer) As Boolean
+        Try
+            v = Convert.ToInt32(o, Globalization.CultureInfo.InvariantCulture)
+            Return True
+        Catch
+            Return False
+        End Try
     End Function
 
     Public Function SearchImage(imagePath As String, x As Integer, y As Integer, width As Integer, height As Integer,
@@ -763,28 +794,6 @@ Public Class Control
                Math.Abs(Int(c1.B) - Int(c2.B)) <= tolerance
     End Function
 
-    ' Overload for FindTextOnScreen that accepts WinGetPos array
-    Public Function FindTextOnScreen2(winPos As Integer(), searchText As String,
-                                     Optional tessdataPath As String = "", Optional lang As String = "eng",
-                                     Optional returnCenter As Boolean = False) As Object
-
-        If winPos Is Nothing Then Return Nothing
-
-        Dim arr As System.Array = TryCast(winPos, System.Array)
-        If arr Is Nothing OrElse arr.Rank <> 1 OrElse arr.Length < 4 Then Return Nothing
-
-        Dim lb As Integer = arr.GetLowerBound(0)
-
-        Dim x As Integer = CInt(arr.GetValue(lb + 0))
-        Dim y As Integer = CInt(arr.GetValue(lb + 1))
-        Dim w As Integer = CInt(arr.GetValue(lb + 2))
-        Dim h As Integer = CInt(arr.GetValue(lb + 3))
-
-        If w <= 0 OrElse h <= 0 Then Return Nothing ' avoid GDI+ ArgumentException
-
-        Return FindTextOnScreen(x, y, w, h, searchText, tessdataPath, lang, returnCenter)
-    End Function
-
     Public Function FindTextOnScreen(screenX As Integer, screenY As Integer, width As Integer, height As Integer, searchText As String,
                                  Optional tessdataPath As String = "",
                                  Optional lang As String = "eng",
@@ -798,9 +807,11 @@ Public Class Control
             Throw New IO.DirectoryNotFoundException("Tessdata folder not found: " & tessdataPath)
         End If
 
+        Dim sParentPath As String = IO.Directory.GetParent(tessdataPath).FullName
+        Dim tesseractExe As String = IO.Path.Combine(sParentPath, "tesseract.exe")
+
         Dim tempImagePath As String = IO.Path.GetTempFileName() & ".png"
         Dim tempOutputPath As String = IO.Path.GetTempFileName()
-        Dim tesseractExe As String = "tesseract.exe" ' Full path if not in PATH
 
         Try
             ' Capture screen area
