@@ -1,6 +1,26 @@
 ﻿Public Class Form1
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
 
+
+        'VideoRecorderTest()
+        'EdgeTest()
+        'ImageSearchTest()
+        'OcrTest()
+        'PdfTest()
+    End Sub
+
+    Sub VideoRecorderTest()
+        Dim vr As New IgorKrup.VideoRecorder
+        vr.sFfmpegFilePath = "C:\Igor\GitHub\ElevenLabs\ffmpeg\bin\ffmpeg.exe"
+        Dim oDevices = vr.ListFfmpegDevices()
+        Dim oMonitor = vr.GetMonitorCaptureInfo()
+        vr.StartRecording("C:\Temp\Test\test.mp4", , oDevices(1), oMonitor(2))
+        'vr.StartRecording("C:\Temp\Test\test.mp4", "Zoom Workplace")
+        MsgBox("recording")
+        vr.StopRecording()
+    End Sub
+
+    Sub EdgeTest()
         Dim ie As New IgorKrup.EdgeDriver
         ie.sSharedDownloadFolder = ""
         ie.UpdateDriver()
@@ -8,11 +28,6 @@
         Dim r = ie.ExecuteScript("return document.title")
         MsgBox(r)
         ie.Quit()
-
-        'EdgeTest()
-        'ImageSearchTest()
-        'OcrTest()
-        'PdfTest()
     End Sub
 
     Sub PdfTest()

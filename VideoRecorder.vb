@@ -16,12 +16,12 @@ Public Class VideoRecorder
     End Sub
 
     Public Sub StartRecording(outputPath As String,
-                              Optional windowTitle As String = "",
-                              Optional audioDeviceName As String = "",
-                              Optional monitorRegion As String = "")
+                          Optional windowTitle As String = "",
+                          Optional audioDeviceName As String = "",
+                          Optional monitorRegion As String = "")
 
         'audioDeviceName - ListFfmpegDevices()
-        'monitorRegion - GetMonitorCaptureInfo()
+        'monitorRegion   - GetMonitorCaptureInfo()
 
         If String.IsNullOrEmpty(sFfmpegFilePath) Then
             Throw New ArgumentException("sFfmpegFilePath is not set to ffmpeg.exe location. Or you can copy the file to the dll folder")
@@ -41,7 +41,6 @@ Public Class VideoRecorder
         recordingFilePath = outputPath
 
         Dim videoInput As String
-
         If windowTitle <> "" Then
             ' Record a specific window
             videoInput = $"-f gdigrab -framerate 25 -i title=""{windowTitle}"""
@@ -62,11 +61,22 @@ Public Class VideoRecorder
         End If
 
         Dim audioInput As String = ""
+        Dim audioEncode As String = ""
         If audioDeviceName <> "" Then
             audioInput = $" -f dshow -i audio=""{audioDeviceName}"""
+            audioEncode = " -c:a aac -b:a 160k -ar 48000 -ac 2"
         End If
 
-        Dim outputSettings = $"-pix_fmt yuv420p ""{outputPath}"""
+        ' Force even dimensions for libx264 + yuv420p (prevents "height not divisible by 2")
+        Dim vfEven As String = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
+
+        ' Sensible H.264 settings; tune preset/crf as you like
+        Dim videoEncode As String = $" -c:v libx264 -preset veryfast -crf 23 -vf ""{vfEven}"""
+
+        ' MP4 compatibility
+        Dim mp4Flags As String = " -pix_fmt yuv420p -movflags +faststart"
+
+        Dim outputSettings As String = $"{videoEncode}{audioEncode}{mp4Flags} ""{outputPath}"""
 
         Dim ffmpegArgs As String = $"-y {videoInput}{audioInput} {outputSettings}"
 
@@ -88,6 +98,7 @@ Public Class VideoRecorder
                                                    End Sub
         recorderProc.BeginErrorReadLine()
     End Sub
+
 
     Public Sub StopRecording()
         If recorderProc Is Nothing Then Exit Sub
@@ -115,29 +126,45 @@ Public Class VideoRecorder
     End Function
 
     Public Function ListFfmpegDevices() As List(Of String)
-        Dim result As New List(Of String)
+        Dim devices As New List(Of String)()
+        Dim psi As New ProcessStartInfo() With {
+        .FileName = sFfmpegFilePath,
+        .Arguments = "-list_devices true -f dshow -i dummy",
+        .UseShellExecute = False,
+        .RedirectStandardError = True,          ' ffmpeg writes to stderr
+        .CreateNoWindow = True,
+        .StandardErrorEncoding = Text.Encoding.UTF8  ' in case of non-ASCII device names
+    }
 
-        Dim proc As New Process()
-        proc.StartInfo.FileName = "ffmpeg"
-        proc.StartInfo.Arguments = "-list_devices true -f dshow -i dummy"
-        proc.StartInfo.UseShellExecute = False
-        proc.StartInfo.RedirectStandardError = True ' ffmpeg outputs device list to stderr
-        proc.StartInfo.CreateNoWindow = True
+        Try
+            Using proc As New Process()
+                proc.StartInfo = psi
+                proc.Start()
 
-        AddHandler proc.ErrorDataReceived, Sub(sender, e)
-                                               If e.Data IsNot Nothing Then
-                                                   ' Filter lines showing devices
-                                                   If e.Data.Contains("DirectShow audio devices") OrElse e.Data.Contains("DirectShow video devices") OrElse e.Data.Trim().StartsWith("""") Then
-                                                       result.Add(e.Data.Trim())
-                                                   End If
-                                               End If
-                                           End Sub
+                ' Read entire stderr (avoid async handler edge cases)
+                Dim err As String = proc.StandardError.ReadToEnd()
+                proc.WaitForExit()
 
-        proc.Start()
-        proc.BeginErrorReadLine()
-        proc.WaitForExit()
+                ' Example line:
+                ' [dshow @ 00000236b046bc40] "Integrated Webcam" (video)
+                ' [dshow @ 00000236b046bc40] "Microphone Array (2- Realtek Audio)" (audio)
+                Dim rx As New System.Text.RegularExpressions.Regex("\[dshow\s*@\s*[^\]]+\]\s*""([^""]+)""\s*\((video|audio)\)",
+                                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
 
-        Return result
+                Dim seen As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+                For Each m As System.Text.RegularExpressions.Match In rx.Matches(err)
+                    Dim name As String = m.Groups(1).Value.Trim()
+                    If name.Length > 0 AndAlso seen.Add(name) Then
+                        devices.Add(name)
+                    End If
+                Next
+            End Using
+        Catch ex As Exception
+            ' Optional: log or surface the error as needed
+            ' Throw or return empty list depending on your needs
+        End Try
+
+        Return devices
     End Function
 
     Public Function GetMonitorCaptureInfo() As List(Of String)
@@ -145,7 +172,7 @@ Public Class VideoRecorder
 
         For Each scr As System.Windows.Forms.Screen In System.Windows.Forms.Screen.AllScreens
             Dim bounds = scr.Bounds
-            Dim info = $"{scr.DeviceName}, {bounds.X},{bounds.Y},{bounds.Width}x{bounds.Height}"
+            Dim info = $"{bounds.X},{bounds.Y},{bounds.Width}x{bounds.Height}"
             monitorList.Add(info)
         Next
 
