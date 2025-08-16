@@ -1,9 +1,9 @@
 oDllList = Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll")
-sRemoteAppFolder = "\\pwas0038\download\IgorKrup" 'Copy DLLs
+sRemoteAppFolder = "" '"\\pwas0038\download\IgorKrup" 'Copy DLLs
 Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
 Dim shell : Set shell = CreateObject("WScript.Shell")
 sFolderPath = GetFolderPath()
-sLibPath = sFolderPath & "\bin\Debug\IgorKrup.dll"
+sLibPath = "" 'sFolderPath & "\bin\Debug\IgorKrup.dll"
 
 If fso.FileExists(sLibPath) = False Then
     sAppFolder = GetAppFolder()
@@ -41,7 +41,7 @@ Sub DownloadFiles(sFromUrlFolder, sToFolder)
     Dim sRemoteFilePath, sLocalFilePath
 
     For Each sDllName in oDllList
-        sFromUrl = sFromUrlFolder & "\" & sDllName
+        sFromUrl = sFromUrlFolder & "/" & sDllName
         sLocalFilePath  = sToFolder  & "\" & sDllName        
 
         If fso.FileExists(sLocalFilePath) Then
@@ -68,28 +68,7 @@ Sub DownloadFiles(sFromUrlFolder, sToFolder)
     Next
 End Sub
 
-Sub DownloadFile(sUrl, sFilePath)
-  Dim oHTTP: Set oHTTP = CreateObject("Microsoft.XMLHTTP")
-  oHTTP.Open "GET", sUrl, False
-  oHTTP.Send
-
-  If oHTTP.Status = 200 Then 
-    Set oStream = CreateObject("ADODB.Stream") 
-    oStream.Open 
-    oStream.Type = 1 
-    oStream.Write oHTTP.ResponseBody 
-    oStream.SaveToFile sFilePath, 2 
-    oStream.Close 
-  Else
-    WScript.Echo "Error Status: " & oHTTP.Status & ", URL:" & sUrl
-  End If
-End Sub
-
 Function GetAppFolder()
-    If fso.FolderExists(sRemoteAppFolder) = False Then
-        MsgBox "Remote App folder cannot be reached: " & sRemoteAppFolder
-    End If
-
     Dim sUserAppFolder: sUserAppFolder = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%")
     If fso.FolderExists(sUserAppFolder) = False Then
         MsgBox "User App Folder does not exist: " & sUserAppFolder
@@ -167,5 +146,73 @@ Function GetFolderPath()
 	Dim oFile 'As Scripting.File
 	Set oFile = fso.GetFile(WScript.ScriptFullName)
 	GetFolderPath = oFile.ParentFolder
+End Function
+
+Sub DownloadFile(srcUrl, destPath)
+  Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
+  Dim folderPath: folderPath = fso.GetParentFolderName(destPath)
+  If Not fso.FolderExists(folderPath) Then fso.CreateFolder folderPath
+
+  Dim url: url = ToRawGithubUrl(srcUrl)
+
+  Dim http: Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
+  Const WinHttpOption_SecureProtocols = 9
+  Const TLS1_0 = &H80, TLS1_1 = &H200, TLS1_2 = &H800
+  http.Option(WinHttpOption_SecureProtocols) = TLS1_0 Or TLS1_1 Or TLS1_2
+
+  ' Follow redirects manually
+  Dim i
+  For i = 1 To 5
+    http.Open "GET", url, False
+    http.SetRequestHeader "User-Agent", "VBScript-Downloader"
+    http.Send
+
+    If http.Status >= 300 And http.Status < 400 Then
+      Dim loc: loc = http.GetResponseHeader("Location")
+      If Len(loc) = 0 Then Exit For
+      url = loc
+    Else
+      Exit For
+    End If
+  Next
+
+  If http.Status = 200 Then
+    ' Optional sanity check: if first byte is "<" it’s probably HTML.
+    Dim rb: rb = http.ResponseBody
+    Dim looksHtml: looksHtml = False
+    If IsArray(rb) Then
+      On Error Resume Next
+      If UBound(rb) >= 0 Then looksHtml = (rb(0) = 60) ' 60 = Asc("<")
+      On Error GoTo 0
+    End If
+
+    Dim ct: ct = LCase(http.GetResponseHeader("Content-Type"))
+
+    If looksHtml Or InStr(ct, "text/html") > 0 Then
+      WScript.Echo "Server returned HTML instead of a binary file." & vbCrLf & _
+                   "Final URL: " & url & vbCrLf & "Content-Type: " & ct & vbCrLf & _
+                   "Tip: make sure it’s a RAW GitHub URL and the repo is public."
+      Exit Sub
+    End If
+
+    Dim stm: Set stm = CreateObject("ADODB.Stream")
+    stm.Type = 1 ' adTypeBinary
+    stm.Open
+    stm.Write http.ResponseBody
+    stm.SaveToFile destPath, 2 ' adSaveCreateOverWrite
+    stm.Close
+    'WScript.Echo "Saved to: " & destPath
+  Else
+    WScript.Echo "HTTP " & http.Status & " " & http.StatusText & vbCrLf & "Final URL: " & url
+  End If
+End Sub
+
+Function ToRawGithubUrl(u)
+  If InStr(u, "://github.com/") > 0 And InStr(u, "/blob/") > 0 Then
+    Dim s: s = Split(Replace(u, "://github.com/", "://raw.githubusercontent.com/"), "/blob/")
+    ToRawGithubUrl = s(0) & "/" & s(1)
+  Else
+    ToRawGithubUrl = u
+  End If
 End Function
 
