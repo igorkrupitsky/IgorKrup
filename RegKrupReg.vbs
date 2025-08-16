@@ -1,17 +1,20 @@
-sRemoteAppFolder = "\\pwas0038\download\IgorKrup" 'Copy: IgorKrup.dll, itextsharp.dll, Keyboard.dll, ICSharpCode.SharpZipLib.dll
+oDllList = Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll")
+sRemoteAppFolder = "\\pwas0038\download\IgorKrup" 'Copy DLLs
 Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
 Dim shell : Set shell = CreateObject("WScript.Shell")
 sFolderPath = GetFolderPath()
 sLibPath = sFolderPath & "\bin\Debug\IgorKrup.dll"
 
 If fso.FileExists(sLibPath) = False Then
+    sAppFolder = GetAppFolder()
+
     If sRemoteAppFolder <> "" Then
-        sAppFolder = GetAppFolder()
-        DownloadDlls sRemoteAppFolder, sAppFolder
-        sLibPath = sAppFolder   & "\IgorKrup.dll"
+        DownloadDlls sRemoteAppFolder, sAppFolder        
     Else
-        sLibPath = ""
+        DownloadFiles "https://github.com/igorkrupitsky/IgorKrup/blob/main/bin/Debug", sAppFolder
     End If
+
+    sLibPath = sAppFolder   & "\IgorKrup.dll"
 End If
 
 If fso.FileExists(sLibPath) Then
@@ -32,6 +35,55 @@ If fso.FileExists(sLibPath) Then
 Else
     MsgBox "Cound not find " & sLibPath
 End if
+
+'======================================
+Sub DownloadFiles(sFromUrlFolder, sToFolder)
+    Dim sRemoteFilePath, sLocalFilePath
+
+    For Each sDllName in oDllList
+        sFromUrl = sFromUrlFolder & "\" & sDllName
+        sLocalFilePath  = sToFolder  & "\" & sDllName        
+
+        If fso.FileExists(sLocalFilePath) Then
+            sTempFilePath  = sToFolder  & "\temp_" & sDllName
+            
+            If fso.FileExists(sTempFilePath) Then
+                fso.DeleteFile sTempFilePath, True
+            End If
+
+            DownloadFile sFromUrl, sTempFilePath
+
+            If fso.GetFileVersion(sLocalFilePath) <> fso.GetFileVersion(sTempFilePath) Then
+                'Versions are different
+                fso.CopyFile sTempFilePath, sLocalFilePath, True
+            End If
+
+            If fso.FileExists(sTempFilePath) Then
+                fso.DeleteFile sTempFilePath, True
+            End If
+
+        Else
+            DownloadFile sFromUrl, sLocalFilePath
+        End If        
+    Next
+End Sub
+
+Sub DownloadFile(sUrl, sFilePath)
+  Dim oHTTP: Set oHTTP = CreateObject("Microsoft.XMLHTTP")
+  oHTTP.Open "GET", sUrl, False
+  oHTTP.Send
+
+  If oHTTP.Status = 200 Then 
+    Set oStream = CreateObject("ADODB.Stream") 
+    oStream.Open 
+    oStream.Type = 1 
+    oStream.Write oHTTP.ResponseBody 
+    oStream.SaveToFile sFilePath, 2 
+    oStream.Close 
+  Else
+    WScript.Echo "Error Status: " & oHTTP.Status & ", URL:" & sUrl
+  End If
+End Sub
 
 Function GetAppFolder()
     If fso.FolderExists(sRemoteAppFolder) = False Then
@@ -54,7 +106,7 @@ End Function
 Sub DownloadDlls(sFromFolder, sToFolder)
     Dim sRemoteFilePath, sLocalFilePath
 
-    For Each sDllName in Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll")
+    For Each sDllName in oDllList
         sRemoteFilePath = sFromFolder & "\" & sDllName
         sLocalFilePath  = sToFolder  & "\" & sDllName
         If fso.FileExists(sRemoteFilePath) Then
