@@ -1,43 +1,49 @@
-oDllList = Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll")
-sRemoteAppFolder = "" '"\\pwas0038\download\IgorKrup" 'Copy DLLs
 Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
 Dim shell : Set shell = CreateObject("WScript.Shell")
-sFolderPath = GetFolderPath()
-sLibPath = "" 'sFolderPath & "\bin\Debug\IgorKrup.dll"
-
-If fso.FileExists(sLibPath) = False Then
-    sAppFolder = GetAppFolder()
-
-    If sRemoteAppFolder <> "" Then
-        DownloadDlls sRemoteAppFolder, sAppFolder        
-    Else
-        DownloadFiles "https://github.com/igorkrupitsky/IgorKrup/blob/main/bin/Debug", sAppFolder
-    End If
-
-    sLibPath = sAppFolder   & "\IgorKrup.dll"
-End If
-
-If fso.FileExists(sLibPath) Then
-    RegisterComClass "IgorKrup", "{6332A55E-EEFF-433B-9976-41A4A0420877}", sLibPath, "IgorKrup.PDF"
-    RegisterComClass "IgorKrup", "{179F44FC-862E-472E-AD91-2BFAFD7763ED}", sLibPath, "IgorKrup.EdgeDriver"
-    RegisterComClass "IgorKrup", "{7142584B-8680-4FD6-9F60-8649F6BF6966}", sLibPath, "IgorKrup.Control"
-    
-    on error resume next
-    Set o = CreateObject("IgorKrup.Control")
-    
-    If Err.number = 0 Then
-        MsgBox "Registed " & sLibPath
-    Else
-        MsgBox "Could not register " & sLibPath & ", " & Err.number & ", " & Err.Description
-    End If
-
-    on error goto 0
-Else
-    MsgBox "Cound not find " & sLibPath
-End if
+InstallIgorKrup
 
 '======================================
-Sub DownloadFiles(sFromUrlFolder, sToFolder)
+Sub InstallIgorKrup
+
+    Dim oDllList: oDllList = Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll")
+    Dim sRemoteAppFolder: sRemoteAppFolder = "" '"\\pwas0038\download\IgorKrup" 'Copy above files to your own file share (if you don't want to download file from github)        
+    Dim sFolderPath: sFolderPath = GetFolderPath()
+    Dim sLibPath: sLibPath = "" 'sFolderPath & "\bin\Debug\IgorKrup.dll"
+
+    If fso.FileExists(sLibPath) = False Then
+        sAppFolder = GetAppFolder()
+
+        If sRemoteAppFolder <> "" Then
+            DownloadDlls oDllList, sRemoteAppFolder, sAppFolder        
+        Else
+            DownloadFiles oDllList, "https://github.com/igorkrupitsky/IgorKrup/blob/main/bin/Debug", sAppFolder
+        End If
+
+        sLibPath = sAppFolder   & "\IgorKrup.dll"
+    End If
+
+    If fso.FileExists(sLibPath) Then
+        RegisterComClass "IgorKrup", "{6332A55E-EEFF-433B-9976-41A4A0420877}", sLibPath, "IgorKrup.PDF"
+        RegisterComClass "IgorKrup", "{179F44FC-862E-472E-AD91-2BFAFD7763ED}", sLibPath, "IgorKrup.EdgeDriver"
+        RegisterComClass "IgorKrup", "{7142584B-8680-4FD6-9F60-8649F6BF6966}", sLibPath, "IgorKrup.Control"
+    
+        on error resume next
+        Set o = CreateObject("IgorKrup.Control")
+    
+        If Err.number = 0 Then
+            WScript.Echo "Registed " & sLibPath
+        Else
+            WScript.Echo "Could not register " & sLibPath & ", " & Err.number & ", " & Err.Description
+        End If
+
+        on error goto 0
+    Else
+        WScript.Echo "Cound not find " & sLibPath
+    End if
+
+End Sub
+
+Sub DownloadFiles(oDllList, sFromUrlFolder, sToFolder)
     Dim sRemoteFilePath, sLocalFilePath
 
     For Each sDllName in oDllList
@@ -50,8 +56,8 @@ Sub DownloadFiles(sFromUrlFolder, sToFolder)
             If fso.FileExists(sTempFilePath) Then
                 fso.DeleteFile sTempFilePath, True
             End If
-
-            DownloadFile sFromUrl, sTempFilePath
+                        
+            DownloadFile ToRawGithubUrl(sFromUrl), sTempFilePath
 
             If fso.GetFileVersion(sLocalFilePath) <> fso.GetFileVersion(sTempFilePath) Then
                 'Versions are different
@@ -68,10 +74,19 @@ Sub DownloadFiles(sFromUrlFolder, sToFolder)
     Next
 End Sub
 
+Function ToRawGithubUrl(u)
+  If InStr(u, "://github.com/") > 0 And InStr(u, "/blob/") > 0 Then
+    Dim s: s = Split(Replace(u, "://github.com/", "://raw.githubusercontent.com/"), "/blob/")
+    ToRawGithubUrl = s(0) & "/" & s(1)
+  Else
+    ToRawGithubUrl = u
+  End If
+End Function
+
 Function GetAppFolder()
     Dim sUserAppFolder: sUserAppFolder = shell.ExpandEnvironmentStrings("%LOCALAPPDATA%")
     If fso.FolderExists(sUserAppFolder) = False Then
-        MsgBox "User App Folder does not exist: " & sUserAppFolder
+        WScript.Echo "User App Folder does not exist: " & sUserAppFolder
     End If
 
     Dim sAppFolder: sAppFolder = sUserAppFolder & "\IgorKrup"
@@ -82,7 +97,7 @@ Function GetAppFolder()
     GetAppFolder = sAppFolder
 End Function
 
-Sub DownloadDlls(sFromFolder, sToFolder)
+Sub DownloadDlls(oDllList, sFromFolder, sToFolder)
     Dim sRemoteFilePath, sLocalFilePath
 
     For Each sDllName in oDllList
@@ -108,7 +123,7 @@ Sub RegisterComClass(assemblyName, clsid, dllFullPath, progId)
 
     On Error Resume Next
     If shell.RegRead(baseKey & "CLSID\" & clsid & "\InprocServer32\CodeBase") = codebase Then
-        'MsgBox "Class is already registered: " & clsid
+        'WScript.Echo "Class is already registered: " & clsid
         'Exit Sub
     End If
     On Error GoTo 0
@@ -148,71 +163,19 @@ Function GetFolderPath()
 	GetFolderPath = oFile.ParentFolder
 End Function
 
-Sub DownloadFile(srcUrl, destPath)
-  Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
-  Dim folderPath: folderPath = fso.GetParentFolderName(destPath)
-  If Not fso.FolderExists(folderPath) Then fso.CreateFolder folderPath
+Sub DownloadFile(sUrl, sFilePath)
+  Dim oHTTP: Set oHTTP = CreateObject("Microsoft.XMLHTTP")
+  oHTTP.Open "GET", sUrl, False
+  oHTTP.Send
 
-  Dim url: url = ToRawGithubUrl(srcUrl)
-
-  Dim http: Set http = CreateObject("WinHttp.WinHttpRequest.5.1")
-  Const WinHttpOption_SecureProtocols = 9
-  Const TLS1_0 = &H80, TLS1_1 = &H200, TLS1_2 = &H800
-  http.Option(WinHttpOption_SecureProtocols) = TLS1_0 Or TLS1_1 Or TLS1_2
-
-  ' Follow redirects manually
-  Dim i
-  For i = 1 To 5
-    http.Open "GET", url, False
-    http.SetRequestHeader "User-Agent", "VBScript-Downloader"
-    http.Send
-
-    If http.Status >= 300 And http.Status < 400 Then
-      Dim loc: loc = http.GetResponseHeader("Location")
-      If Len(loc) = 0 Then Exit For
-      url = loc
-    Else
-      Exit For
-    End If
-  Next
-
-  If http.Status = 200 Then
-    ' Optional sanity check: if first byte is "<" it’s probably HTML.
-    Dim rb: rb = http.ResponseBody
-    Dim looksHtml: looksHtml = False
-    If IsArray(rb) Then
-      On Error Resume Next
-      If UBound(rb) >= 0 Then looksHtml = (rb(0) = 60) ' 60 = Asc("<")
-      On Error GoTo 0
-    End If
-
-    Dim ct: ct = LCase(http.GetResponseHeader("Content-Type"))
-
-    If looksHtml Or InStr(ct, "text/html") > 0 Then
-      WScript.Echo "Server returned HTML instead of a binary file." & vbCrLf & _
-                   "Final URL: " & url & vbCrLf & "Content-Type: " & ct & vbCrLf & _
-                   "Tip: make sure it’s a RAW GitHub URL and the repo is public."
-      Exit Sub
-    End If
-
-    Dim stm: Set stm = CreateObject("ADODB.Stream")
-    stm.Type = 1 ' adTypeBinary
-    stm.Open
-    stm.Write http.ResponseBody
-    stm.SaveToFile destPath, 2 ' adSaveCreateOverWrite
-    stm.Close
-    'WScript.Echo "Saved to: " & destPath
+  If oHTTP.Status = 200 Then 
+    Set oStream = CreateObject("ADODB.Stream") 
+    oStream.Open 
+    oStream.Type = 1 
+    oStream.Write oHTTP.ResponseBody 
+    oStream.SaveToFile sFilePath, 2 
+    oStream.Close 
   Else
-    WScript.Echo "HTTP " & http.Status & " " & http.StatusText & vbCrLf & "Final URL: " & url
+    WScript.Echo "Error Status: " & oHTTP.Status & ", URL:" & sUrl
   End If
 End Sub
-
-Function ToRawGithubUrl(u)
-  If InStr(u, "://github.com/") > 0 And InStr(u, "/blob/") > 0 Then
-    Dim s: s = Split(Replace(u, "://github.com/", "://raw.githubusercontent.com/"), "/blob/")
-    ToRawGithubUrl = s(0) & "/" & s(1)
-  Else
-    ToRawGithubUrl = u
-  End If
-End Function
-
