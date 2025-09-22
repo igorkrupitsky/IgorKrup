@@ -22,13 +22,21 @@ Public Class EdgeDriver
     Public Property useHeadless As Boolean = False
     Public Property acceptInsecureCerts As Boolean = False
     Public Property unhandledPromptBehavior As String = "" 'dismiss,accept,dismiss and notify,accept and notify,ignore
-    Public Property useCurrentUserProfile As Boolean = True
+    Public Property useCurrentUserProfile As Boolean = False
 
     Dim proc As Process = Nothing
     Dim sessionId As String = ""
+    Dim sBaseDirectory As String = ""
 
     Public Sub New()
         sEdgeDriverPath = GetEdgeDriverPath()
+    End Sub
+
+    Public Sub [Get](url As String,
+                      Optional username As String = "",
+                      Optional password As String = "",
+                      Optional maxWaitSec As Integer = 60)
+        GetUrl(url, username, password, maxWaitSec)
     End Sub
 
     Public Sub GetUrl(url As String,
@@ -37,7 +45,7 @@ Public Class EdgeDriver
                       Optional maxWaitSec As Integer = 60)
         If proc Is Nothing Then
             If sEdgeDriverPath = "" Then
-                MsgBox($"msedgedriver.exe is missing. Run UpdateDriver() or manually download msedgedriver.exe to {AppDomain.CurrentDomain.BaseDirectory} from https://developer.microsoft.com/en-us/microsoft-edge/tools/webdrive")
+                MsgBox($"msedgedriver.exe is missing. Run UpdateDriver() or manually download msedgedriver.exe to {GetBaseDirectory()} from https://developer.microsoft.com/en-us/microsoft-edge/tools/webdrive")
                 Exit Sub
             End If
             Init()
@@ -813,7 +821,63 @@ Public Class EdgeDriver
 
     ' UpdateDriver =====================================
 
-    Public Sub UpdateDriver()
+    Private Function GetBaseDirectory() As String
+        If sBaseDirectory <> "" Then
+            Return sBaseDirectory
+        End If
+
+        sBaseDirectory = GetDllFolderFromRegistry()
+        If sBaseDirectory <> "" Then
+            Return sBaseDirectory
+        End If
+
+        Dim sFolder As String = AppDomain.CurrentDomain.BaseDirectory
+        Dim sSysFolder As String = Environment.GetFolderPath(Environment.SpecialFolder.System)
+        If String.Equals(sBaseDirectory.TrimEnd("\"c), sSysFolder, StringComparison.OrdinalIgnoreCase) Then
+
+            Dim sAppData As String = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+            Dim sMyAppFolder As String = IO.Path.Combine(sAppData, "IgorKrup")
+
+            If IO.Directory.Exists(sMyAppFolder) = False Then
+                IO.Directory.CreateDirectory(sMyAppFolder)
+            End If
+
+            Return sMyAppFolder
+        End If
+
+        Return sFolder
+    End Function
+
+    Public Function GetDllFolderFromRegistry() As String
+        Const regPath As String = "SOFTWARE\Classes\CLSID\{179F44FC-862E-472E-AD91-2BFAFD7763ED}\InprocServer32"
+        Const valueName As String = "CodeBase"
+
+        Using key As Microsoft.Win32.RegistryKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(regPath, writable:=False)
+            If key IsNot Nothing Then
+                Dim codeBase As Object = key.GetValue(valueName)
+                If codeBase IsNot Nothing Then
+                    Dim uriString As String = codeBase.ToString()
+
+                    ' Convert file:/// URI to local path
+                    Dim uri As New Uri(uriString)
+                    Dim dllPath As String = uri.LocalPath
+
+                    ' Get the containing folder
+                    Return Path.GetDirectoryName(dllPath)
+                End If
+            End If
+        End Using
+
+        Return ""
+    End Function
+
+    Public Sub UpdateDriver(ByVal Optional sWScript_ScriptFullName As String = "")
+        'Debugger.Launch()
+
+        If sWScript_ScriptFullName <> "" Then
+            sBaseDirectory = IO.Path.GetDirectoryName(sWScript_ScriptFullName)
+        End If
+
         If sEdgeDriverPath = "" Then
             GetSelenium()
             Exit Sub
@@ -839,7 +903,7 @@ Public Class EdgeDriver
             "edgedriver_" & (iEdgeVersion - 2) & ".exe"
         }
 
-            Dim sPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, sFileName)
+            Dim sPath = Path.Combine(GetBaseDirectory(), sFileName)
             If IO.File.Exists(sPath) Then
                 Return sPath
             End If
@@ -863,7 +927,7 @@ Public Class EdgeDriver
             Dim sFileName = $"edgedriver_{sEdgeVersion}.exe"
             Dim sSharedPath = Path.Combine(sSharedDownloadFolder, sFileName)
             If IO.File.Exists(sSharedPath) Then
-                Dim sLocalPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, sFileName)
+                Dim sLocalPath = Path.Combine(GetBaseDirectory(), sFileName)
                 If IO.File.Exists(sLocalPath) = False Then
                     File.Copy(sSharedPath, sLocalPath)
                 End If
@@ -892,7 +956,7 @@ Public Class EdgeDriver
         End If
 
         Dim downloadUrl = match.Groups(1).Value
-        Dim baseFolder = AppDomain.CurrentDomain.BaseDirectory
+        Dim baseFolder = GetBaseDirectory()
         Dim zipPath = Path.Combine(baseFolder, "edgedriver_win64.zip")
 
         If File.Exists(zipPath) Then File.Delete(zipPath)
@@ -1004,5 +1068,7 @@ Public Class EdgeDriver
         End If
         Return fullVersion
     End Function
+
+
 
 End Class
