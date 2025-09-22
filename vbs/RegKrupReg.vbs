@@ -167,33 +167,39 @@ Function GetFolderPath()
 End Function
 
 Sub DownloadGitHubFile(sUrl, sFilePath)
-  Dim sUrl2: sUrl2 = NormalizeGitHubUrl(sUrl)
+    Dim sUrl2: sUrl2 = NormalizeGitHubUrl(sUrl)
 
-  Dim oHTTP: Set oHTTP = CreateObject("Microsoft.XMLHTTP")
-  oHTTP.Open "GET", sUrl2, False
-  oHTTP.Send
+    Dim oHTTP: Set oHTTP = CreateObject("Microsoft.XMLHTTP")
+    oHTTP.Open "GET", sUrl2, False
+    oHTTP.Send
 
-  If oHTTP.Status = 200 Then 
-    Set oStream = CreateObject("ADODB.Stream") 
-    oStream.Open 
-    oStream.Type = 1 
-    oStream.Write oHTTP.ResponseBody 
-    oStream.SaveToFile sFilePath, 2 
-    oStream.Close 
-  Else
-    WScript.Echo "Error Status: " & oHTTP.Status & ", URL:" & sUrl2
-  End If
-
-    Set oFile = fso.GetFile(sToFilePath)
-    If oFile.Size > 500000 Then
-        'File should be HTML if over 0.5 MB
+    If oHTTP.Status = 200 Then 
+        Set oStream = CreateObject("ADODB.Stream") 
+        oStream.Open 
+        oStream.Type = 1 
+        oStream.Write oHTTP.ResponseBody 
+        oStream.SaveToFile sFilePath, 2 
+        oStream.Close 
     Else
-        sFileText = GetFileText(sToFilePath)
+        WScript.Echo "Error Status: " & oHTTP.Status & ", URL:" & sUrl2
+    End If
+
+    Set oFile = fso.GetFile(sFilePath)
+    If oFile.Size > 500000 Then
+        'File should be OK (not html) if over 0.5 MB
+    Else
+        sFileText = GetFileText(sFilePath)
         If InStr(sFileText, "<!doctype html") > 0 Or InStr(sFileText, "<html") > 0 Then
             MsgBox "Could not download: " & sUrl & cvCrLf & sFileText
         End If
     End If
 End Sub
+
+Function GetFileText(filePath)
+    Dim ts: Set ts = fso.OpenTextFile(filePath, 1, False, -2) ' 1 = ForReading
+    GetFileText = ts.ReadAll
+    ts.Close
+End Function
 
 Function NormalizeGitHubUrl(ByVal url)
     Dim re, m
