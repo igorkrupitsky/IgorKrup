@@ -129,7 +129,7 @@ Sub PdfToMarkDown(sFilePath)
         WScript.Quit
     End If
     
-    Set ie = CreateObject("Selenium.EdgeDriver")
+    Set ie = CreateObject("IgorKrup.EdgeDriver")
     ie.Get "https://m365.cloud.microsoft/chat" 
 
     WaitForIE
@@ -225,7 +225,16 @@ Function SendFile(sPrompt, sCloudPath)
     ie.ExecuteScript "document.querySelector(""div[role='menuitem']"").click()"
     ie.ExecuteScript "document.querySelector(""button[data-testid='upload-cloud-file']"").click()"
 
-    Set iframe = ie.FindElementByXPath("//iframe[@title='File Picker']")
+    WScript.Sleep 300
+    Dim iframe: iframe = ie.FindElementByXPath("//iframe[@title='File Picker']")
+    If iframe = "" Then
+        If MsgBox ("File Picker fame cannot be found.  Try again?", vbYesNo + vbQuestion) = vbYes Then
+            iframe = ie.FindElementByXPath("//iframe[@title='File Picker']")
+        Else
+            WScript.Quit
+        End If
+    End If
+
     ie.SwitchToFrame iframe
 
     'Pick Files Dialog

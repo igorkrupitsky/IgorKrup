@@ -92,13 +92,25 @@ Public Class EdgeDriver
         Return oRet("value")
     End Function
 
+    Public Sub SwitchToDefaultContent()
+        SwitchToFrame(Nothing)
+    End Sub
 
     Public Sub SwitchToFrame(identifier As Object)
         Dim serializer As New JavaScriptSerializer()
         Dim idPayload As New Dictionary(Of String, Object)()
 
-        If TypeOf identifier Is Integer OrElse TypeOf identifier Is String Then
+        If  identifier Is nothing Then
+            idPayload("id") = Nothing
+
+        ElseIf TypeOf identifier Is Integer Then
             idPayload("id") = identifier
+
+        ElseIf TypeOf identifier Is String Then
+            Dim elementRef As New Dictionary(Of String, Object)()
+            elementRef("element-6066-11e4-a52e-4f735466cecf") = identifier
+            idPayload("id") = elementRef
+
         ElseIf TypeOf identifier Is Dictionary(Of String, Object) Then
             idPayload("id") = identifier ' WebElement JSON object
         Else
@@ -821,7 +833,7 @@ Public Class EdgeDriver
 
     ' UpdateDriver =====================================
 
-    Private Function GetBaseDirectory() As String
+    Public Function GetBaseDirectory() As String
         If sBaseDirectory <> "" Then
             Return sBaseDirectory
         End If

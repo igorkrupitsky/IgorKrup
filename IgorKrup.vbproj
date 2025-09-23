@@ -136,7 +136,6 @@
     <Content Include="Keyboard\Keyboard.cpp" />
     <Content Include="Keyboard\Keyboard.dll" />
     <Content Include="Keyboard\readme.txt" />
-    <Content Include="vbs\github_download_test.vbs" />
     <Content Include="vbs\pdf_md.vbs" />
     <Content Include="vbs\RegKrupReg.vbs" />
   </ItemGroup>
