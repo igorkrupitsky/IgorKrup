@@ -130,6 +130,7 @@ Sub PdfToMarkDown(sFilePath)
     End If
     
     Set ie = CreateObject("IgorKrup.EdgeDriver")
+    ie.UpdateDriver
     ie.Get "https://m365.cloud.microsoft/chat" 
 
     WaitForIE
