@@ -69,6 +69,7 @@ Sub ProcessFile (sFilePath)
     End If
 
     BreakePdfToPages sFilePath
+    CopyPdfToOneDrive sFilePath
     PdfToMarkDown sFilePath
     MergeMdFiles sFilePath 
 End Sub
@@ -143,6 +144,8 @@ Sub PdfToMarkDown(sFilePath)
     bFirstQuestion = True
     sPrompt = "OCR attached PDF.  Do not provide any comments, just output."
 
+    Dim sCloudFileFolder: sCloudFileFolder = GetCloudFolder(sFilePath)
+
     Dim oFolder: Set oFolder = fso.GetFolder(sFolderPath)
     For Each oFile In oFolder.Files
         If fso.GetExtensionName(oFile.Name) = "pdf" Then
@@ -150,11 +153,13 @@ Sub PdfToMarkDown(sFilePath)
             sTextFilePath = sFolderPath & "\" & fso.GetBaseName(oFile.Path) & ".md"
             If fso.FileExists(sTextFilePath) = False Then
 
+                sCloudPath = "Microsoft Copilot Chat Files\Temp\" & fso.GetBaseName(sFilePath) & "\" & oFile.Name 'Microsoft Copilot Chat Files\Temp\FileName\001.pdf"
+                        
                 If bFirstQuestion = False Then                
                     NewQuestion
                 End If
 
-                sAnswer = SendFile(sPrompt, oFile.Path)
+                sAnswer = SendFile(sPrompt, sCloudPath)
                 bFirstQuestion = False
 
                 If sAnswer <> "" Then
@@ -206,7 +211,7 @@ Sub NewQuestion
     WScript.Sleep 1000
 End Sub
 
-Function SendFile(sPrompt, sFilePath)
+Function SendFile(sPrompt, sCloudPath)
     ie.ExecuteScript "const oSpan = document.querySelector('span[contenteditable]');"& _
     "oSpan.focus();" & _
     "const event = new InputEvent('beforeinput', {inputType: 'insertText', data: `" & Replace(sPrompt,"`","\`") & "`, bubbles: true, cancelable: true});" & _
@@ -219,17 +224,104 @@ Function SendFile(sPrompt, sFilePath)
 
     ie.ExecuteScript "document.querySelector(""button[data-testid='PlusMenuButton']"").click()"
     ie.ExecuteScript "document.querySelector(""div[role='menuitem']"").click()"
-    ie.ExecuteScript "document.querySelector(""button[data-testid='upload-local-file']"").click()"
+    ie.ExecuteScript "document.querySelector(""button[data-testid='upload-cloud-file']"").click()"
 
-    sFileInputElementId = ie.FindElementByCss("input[type='file']")
-    ie.UploadFileToElement sFilePath, sFileInputElementId
+    WScript.Sleep 300
+    Dim iframe: iframe = ie.FindElementByXPath("//iframe[@title='File Picker']")
+    If iframe = "" Then
+        If MsgBox ("File Picker fame cannot be found.  Try again?", vbYesNo + vbQuestion) = vbYes Then
+            iframe = ie.FindElementByXPath("//iframe[@title='File Picker']")
+        Else
+            WScript.Quit
+        End If
+    End If
 
-    WScript.Sleep 2000 'Wait for uplaod finish
+    ie.SwitchToFrame iframe
+
+    'Pick Files Dialog
+    Do While ie.ExecuteScript("return document.querySelectorAll(""button[data-automationid='nav-collapse-button']"").length") = 0
+        WScript.Sleep 100
+    Loop
+
+    ie.ExecuteScript "document.querySelector(""div[name='My files']"").click()"
+    WScript.Sleep 3000
+
+    Do While ie.ExecuteScript("return document.querySelectorAll(""input[role='searchbox']"").length") = 0
+        WScript.Sleep 100
+    Loop
+
+    'Search Function
+    ie.ExecuteScript "window.SearchItem = function(searchText){" & _
+            "var o = document.querySelector(""input[role='searchbox']"");" & _
+            "o.focus();" & _
+            "o.value = searchText;" & _
+            "o.dispatchEvent(new Event('input', { bubbles: true }));" & _
+            "o.dispatchEvent(new Event('change', { bubbles: true }));" & _
+            "o.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));" & _
+            "o.dispatchEvent(new KeyboardEvent('keyup',   { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true }));" & _
+        "}"
+
+    oCloudPath = Split(sCloudPath, "\")
+
+    For Each sPart in oCloudPath
+
+        Do While ie.ExecuteScript("return document.querySelectorAll('div[data-is-scrollable]').length") = 0
+            WScript.Sleep 100
+        Loop
+
+        WScript.Sleep 200
+
+        iWait = 1
+        Do While ie.ExecuteScript("window.items = document.querySelectorAll(""[data-automationid='FieldRenderer-name'][title='" & sPart & "']""); return items.length") = 0
+            WScript.Sleep 10
+            iWait = iWait + 1
+                
+            If iWait = 100 * 1 and InStr(sPart, ".pdf") <> 0 Then
+                '1 sec PDF
+                ie.ExecuteScript "SearchItem('" & sPart & "')"
+
+            ElseIf iWait = 100 * 2 and InStr(sPart, ".pdf") = 0 Then
+                '2 sec Folder
+                ie.ExecuteScript "var o = document.querySelector('div[data-is-scrollable]'); o.scrollTo({top: o.scrollHeight,  behavior: 'smooth'})"
+
+            ElseIf iWait = 100 * 5 Then
+                '5 sec
+                ie.ExecuteScript "SearchItem('')" 'Reset search
+                ie.ExecuteScript "var o = document.querySelector('div[data-is-scrollable]'); " & _
+                                    "var dir = 1; var step = 5;" & _
+                                    "setInterval(function(){ " & _
+                                    "o.scrollTop += step * dir;" & _
+                                    "if (o.scrollTop + o.clientHeight >= o.scrollHeight - 5) {dir = -1; step = Math.max(step - 1, 2);} " & _
+                                    "if (o.scrollTop <= 5) {dir  = 1; step = Math.max(step - 1, 2);} " & _
+                                    "}, 10)"    
+
+            ElseIf iWait > 100 * 60 * 5 Then
+                '5 mins
+                ie.ExecuteScript "SearchItem('" & sPart & "')"
+                MsgBox "Could not select " & sPart & ". Please select " & sPart & " manually."
+                ie.ExecuteScript "SearchItem('')" 'Reset search
+                ie.ExecuteScript "window.items = []"
+            End If
+        Loop
+
+        ie.ExecuteScript "if (window.items.length > 0) window.items[0].click()"
+        WScript.Sleep 1000
+    Next
+
+    ie.ExecuteScript "document.querySelector(""button[data-automationid='picker-complete']"").click()"
+    WScript.Sleep 200
+
+    ie.SwitchToDefaultContent
+
+    'Wait for uplaod finish
+    Do While ie.ExecuteScript("return document.querySelectorAll(""button[type='submit']"").length") = 0
+        WScript.Sleep 100
+    Loop
+
+    ie.ExecuteScript "document.querySelector(""button[type='submit']"").click()"
 
     'Wait for reply
     Do While ie.ExecuteScript("return document.querySelectorAll(""div[data-testid='markdown-reply']"").length") = 0
-
-        ie.ExecuteScript "var o = document.querySelector(""button[type='submit']""); if (o) o.click()"
         WScript.Sleep 100
     Loop
 
@@ -275,6 +367,89 @@ Function ReadTextFile(sPath)
     Set file = Nothing
     ReadTextFile = sRet
 End Function
+
+Function GetCloudFolder(sFilePath)
+    Dim sOneDrivePath: sOneDrivePath = GetOneDrivePath()
+    If fso.FolderExists(sOneDrivePath) = False Then
+        MsgBox "OneDrive folder does not exist: " & sOneDrivePath
+        WScript.Quit
+    End If
+
+    Dim sCloudLocal: sCloudLocal = sOneDrivePath & "\Microsoft Copilot Chat Files" 
+    If fso.FolderExists(sCloudLocal) = False Then
+       sCloudLocal =  sOneDrivePath
+    End If
+
+    'Create Cloud: Temp
+    Dim sCloudLocalSubFolder: sCloudLocalSubFolder = sCloudLocal & "\Temp"
+    If fso.FolderExists(sCloudLocalSubFolder) = False Then
+        fso.CreateFolder sCloudLocalSubFolder
+    End If
+    
+    'Create Cloud: Temp\FileName
+    Dim sCloudFileFolder: sCloudFileFolder = sCloudLocalSubFolder & "\" & fso.GetBaseName(sFilePath)
+    If fso.FolderExists(sCloudFileFolder) = False Then
+        fso.CreateFolder sCloudFileFolder
+    End If
+
+    GetCloudFolder = sCloudFileFolder
+End Function
+
+Function GetOneDrivePath()
+  Dim sh, p
+  Set sh = CreateObject("WScript.Shell")
+
+  ' 1) Environment variables (fast path)
+  p = sh.ExpandEnvironmentStrings("%OneDrive%")
+  If p <> "%OneDrive%" And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  p = sh.ExpandEnvironmentStrings("%OneDriveCommercial%")
+  If p <> "%OneDriveCommercial%" And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  p = sh.ExpandEnvironmentStrings("%OneDriveConsumer%")
+  If p <> "%OneDriveConsumer%" And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  ' 2) Shell known folders (version-independent)
+  On Error Resume Next
+  p = CreateObject("Shell.Application").NameSpace("shell:OneDrive").Self.Path
+  If Err.Number = 0 And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  p = CreateObject("Shell.Application").NameSpace("shell:OneDriveCommercial").Self.Path
+  If Err.Number = 0 And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+  On Error GoTo 0
+
+  ' 3) Optional registry fallback (last resort)
+  p = ""
+  On Error Resume Next
+  p = sh.RegRead("HKCU\SOFTWARE\Microsoft\OneDrive\Accounts\Business1\UserFolder")
+  On Error GoTo 0
+  GetOneDrivePath = p
+End Function
+
+Sub CopyPdfToOneDrive(sFilePath)
+
+    Dim oFile: Set oFile = fso.GetFile(sFilePath)
+    Dim sFolderPath: sFolderPath = oFile.ParentFolder.Path & "\" & fso.GetBaseName(oFile.Name)    
+    If fso.FolderExists(sFolderPath) = False Then
+        MsgBox "CopyPdfToOneDrive. Folder does not exist: " & sFolderPath
+        WScript.Quit
+    End If
+
+    Dim sCloudFileFolder: sCloudFileFolder = GetCloudFolder(sFilePath)
+
+    Dim sCloudFilePath
+    Dim oPageFile
+    Dim oPageFolder: Set oPageFolder = fso.GetFolder(sFolderPath)
+
+    For Each oPageFile In oPageFolder.Files
+        If fso.GetExtensionName(oPageFile.Name) = "pdf" Then
+            sCloudFilePath = sCloudFileFolder & "\" & oPageFile.Name
+            If fso.FileExists(sCloudFilePath) = False Then
+                fso.CopyFile oPageFile.Path, sCloudFilePath
+            End If
+        End If
+    Next
+End Sub
 
 Sub BreakePdfToPages(sFilePath)
     Dim oPdf: Set oPdf = CreateObject("IgorKrup.PDF")

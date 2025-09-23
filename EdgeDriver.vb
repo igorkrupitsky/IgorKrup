@@ -86,10 +86,24 @@ Public Class EdgeDriver
         Dim serializer As New JavaScriptSerializer()
         Dim payload = New Dictionary(Of String, Object) From {{"script", sJS}, {"args", New Object() {}}}
         Dim sJson = serializer.Serialize(payload)
+        Dim sRetJson As String = ""
 
-        Dim sRetJson = SendRequest($"http://localhost:{iPort}/session/{sessionId}/execute/sync", "POST", sJson)
-        Dim oRet As Object = serializer.DeserializeObject(sRetJson)
-        Return oRet("value")
+        If sJS.IndexOf("PlusMenuButton") <> -1 Then
+            sRetJson = SendRequest($"http://localhost:{iPort}/session/{sessionId}/execute/sync", "POST", sJson)
+        Else
+            Try
+                sRetJson = SendRequest($"http://localhost:{iPort}/session/{sessionId}/execute/sync", "POST", sJson)
+            Catch ex As Exception
+                'Debugger.Launch()
+            End Try
+        End If
+
+        If sRetJson <> "" Then
+            Dim oRet As Object = serializer.DeserializeObject(sRetJson)
+            Return oRet("value")
+        End If
+
+        Return ""
     End Function
 
     Public Sub SwitchToDefaultContent()
@@ -561,22 +575,63 @@ Public Class EdgeDriver
         PerformActions(json)
     End Sub
 
-
     ' Uploads file to WebDriver and returns the remote path for input[type="file"]
     Public Function UploadFile(localPath As String) As String
-        Dim fileBytes = File.ReadAllBytes(localPath)
-        Dim base64 = Convert.ToBase64String(fileBytes)
-        Dim payload = New Dictionary(Of String, Object) From {
-        {"file", base64}
-    }
+        ' 1) Build a ZIP archive in memory containing the file
+        Dim zipBase64 As String
+        Using ms As New MemoryStream()
+            Using zipStream As New ICSharpCode.SharpZipLib.Zip.ZipOutputStream(ms)
+                zipStream.SetLevel(0) ' no compression (fast & valid)
+
+                Dim fileName = Path.GetFileName(localPath)
+                Dim entry As New ICSharpCode.SharpZipLib.Zip.ZipEntry(fileName) With {
+                .DateTime = DateTime.Now,
+                .Size = New FileInfo(localPath).Length
+            }
+                zipStream.PutNextEntry(entry)
+
+                Dim buffer(4095) As Byte
+                Using fs As FileStream = File.OpenRead(localPath)
+                    Dim read As Integer
+                    Do
+                        read = fs.Read(buffer, 0, buffer.Length)
+                        If read > 0 Then
+                            zipStream.Write(buffer, 0, read)
+                        End If
+                    Loop While read > 0
+                End Using
+
+                zipStream.CloseEntry()
+                zipStream.IsStreamOwner = False ' leave underlying ms open
+                zipStream.Close()
+            End Using
+
+            ' Convert ZIP bytes → base64 string
+            zipBase64 = Convert.ToBase64String(ms.ToArray())
+        End Using
+
+        ' 2) POST {"file":"<base64-zip>"} to /session/{id}/file
+        Dim payload = New Dictionary(Of String, Object) From {{"file", zipBase64}}
         Dim sJson = New JavaScriptSerializer().Serialize(payload)
-        Dim resp = SendRequest($"http://localhost:{iPort}/session/{sessionId}/file", "POST", sJson)
-        Return New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)("value").ToString()
+
+        Dim url = $"http://localhost:{iPort}/session/{sessionId}/file"
+        Dim resp = SendRequest(url, "POST", sJson)
+
+        ' 3) Parse and return the remote file path
+        Dim parsed = New JavaScriptSerializer().Deserialize(Of Dictionary(Of String, Object))(resp)
+        Return parsed("value").ToString()
     End Function
 
     ' Uploads file and sends its remote path to a file input element (by element ID)
     Public Sub UploadFileToElement(localPath As String, elementId As String)
+
+        'Debugger.Launch()
+
         Dim remotePath = UploadFile(localPath)
+        If remotePath = "" Then
+            Throw New Exception("UploadFile did not return remotePath")
+        End If
+
         SendKeysToElement(elementId, remotePath)
     End Sub
 
@@ -811,25 +866,108 @@ Public Class EdgeDriver
         Return False
     End Function
 
+
     Private Function SendRequest(url As String, method As String, body As String) As String
         Dim req = CType(WebRequest.Create(url), HttpWebRequest)
         req.Method = method
-        req.ContentType = "application/json"
+        req.ContentType = "application/json; charset=utf-8"
 
         If Not String.IsNullOrEmpty(body) Then
             Dim bytes = Encoding.UTF8.GetBytes(body)
-            req.ContentLength = bytes.Length
             Using stream = req.GetRequestStream()
                 stream.Write(bytes, 0, bytes.Length)
             End Using
         End If
 
-        Using resp = CType(req.GetResponse(), HttpWebResponse)
-            Using reader = New StreamReader(resp.GetResponseStream())
-                Return reader.ReadToEnd()
+        Try
+            Using resp = CType(req.GetResponse(), HttpWebResponse)
+                Using reader = New StreamReader(resp.GetResponseStream())
+                    Return reader.ReadToEnd()
+                End Using
             End Using
-        End Using
+
+        Catch ex As WebException
+            Dim errBody As String = ""
+            If ex.Response IsNot Nothing Then
+                Using resp = CType(ex.Response, HttpWebResponse)
+                    Using reader = New StreamReader(resp.GetResponseStream())
+                        errBody = reader.ReadToEnd()    ' <-- This contains {"value":{"error":"javascript error","message":"..."}}
+                        errBody = TryGetWebDriverError(errBody)
+                    End Using
+                End Using
+            End If
+            Throw New Exception($"HTTP error {method}, {body}, {url}, {ex.Message}. Error: {errBody}")
+        End Try
     End Function
+
+
+    Private Function TryGetWebDriverError(body As String) As String
+        If body = "" Then Return ""
+
+        Try
+            Dim js As New JavaScriptSerializer()
+            Dim root = js.Deserialize(Of Dictionary(Of String, Object))(body)
+
+            ' WebDriver typically wraps everything in "value"
+            Dim value As Object
+            If root.ContainsKey("value") Then
+                value = root("value")
+            Else
+                value = root
+            End If
+
+            Dim dict = TryCast(value, Dictionary(Of String, Object))
+            If dict Is Nothing Then Return ""
+
+            Dim err As String = GetString(dict, "error")
+            Dim msg As String = GetString(dict, "message")
+            Dim stack As String = GetString(dict, "stacktrace")
+
+            Dim sb As New Text.StringBuilder()
+            If Not String.IsNullOrEmpty(err) Then sb.AppendLine($"WebDriver: {err}")
+            If Not String.IsNullOrEmpty(msg) Then sb.AppendLine($"Message : {OneLine(msg)}")
+
+            ' Add a hint for common “null click” error
+            If Not String.IsNullOrEmpty(msg) AndAlso
+           (msg.IndexOf("reading 'click'", StringComparison.OrdinalIgnoreCase) >= 0 OrElse
+            msg.IndexOf("Cannot read properties of null", StringComparison.OrdinalIgnoreCase) >= 0) Then
+                sb.AppendLine("Hint    : Element not found. Check selector/timing/frame.")
+            End If
+
+            If Not String.IsNullOrEmpty(stack) Then
+                sb.AppendLine("Stack   : " & FirstLines(stack, 3))
+            End If
+
+            Return sb.ToString().TrimEnd()
+
+        Catch
+            Return "" ' not valid JSON, let caller fallback
+        End Try
+    End Function
+
+    Private Function GetString(dict As Dictionary(Of String, Object), key As String) As String
+        If dict.ContainsKey(key) AndAlso dict(key) IsNot Nothing Then
+            Return dict(key).ToString()
+        End If
+        Return ""
+    End Function
+
+    Private Function OneLine(s As String) As String
+        Return s.Replace(vbCr, " ").Replace(vbLf, " ")
+    End Function
+
+    Private Function FirstLines(s As String, n As Integer) As String
+        Dim lines = s.Replace(vbCrLf, vbLf).Split(CChar(vbLf))
+        If lines.Length > n Then
+            ReDim Preserve lines(n - 1)
+        End If
+        For i = 0 To lines.Length - 1
+            lines(i) = lines(i).Trim()
+        Next
+        Return String.Join(" | ", lines)
+    End Function
+
+
 
     ' UpdateDriver =====================================
 
