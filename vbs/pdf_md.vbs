@@ -359,11 +359,15 @@ Function ReadTextFile(sPath)
 End Function
 
 Function GetCloudFolder(sFilePath)
-    Const sCloudBase = "Microsoft Copilot Chat Files"
-    Dim sCloudLocal: sCloudLocal = "C:\Users\" & sRunUser & "\OneDrive - Moffitt Cancer Center\" & sCloudBase
-    If fso.FolderExists(sCloudLocal) = False Then
-        MsgBox "OneDrive folder does not exist: " & sCloudLocal
+    Dim sOneDrivePath: sOneDrivePath = GetOneDrivePath()
+    If fso.FolderExists(sOneDrivePath) = False Then
+        MsgBox "OneDrive folder does not exist: " & sOneDrivePath
         WScript.Quit
+    End If
+
+    Dim sCloudLocal: sCloudLocal = sOneDrivePath & "\Microsoft Copilot Chat Files" 
+    If fso.FolderExists(sCloudLocal) = False Then
+       sCloudLocal =  sOneDrivePath
     End If
 
     'Create Cloud: Temp
@@ -379,6 +383,37 @@ Function GetCloudFolder(sFilePath)
     End If
 
     GetCloudFolder = sCloudFileFolder
+End Function
+
+Function GetOneDrivePath()
+  Dim sh, p
+  Set sh = CreateObject("WScript.Shell")
+
+  ' 1) Environment variables (fast path)
+  p = sh.ExpandEnvironmentStrings("%OneDrive%")
+  If p <> "%OneDrive%" And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  p = sh.ExpandEnvironmentStrings("%OneDriveCommercial%")
+  If p <> "%OneDriveCommercial%" And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  p = sh.ExpandEnvironmentStrings("%OneDriveConsumer%")
+  If p <> "%OneDriveConsumer%" And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  ' 2) Shell known folders (version-independent)
+  On Error Resume Next
+  p = CreateObject("Shell.Application").NameSpace("shell:OneDrive").Self.Path
+  If Err.Number = 0 And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+
+  p = CreateObject("Shell.Application").NameSpace("shell:OneDriveCommercial").Self.Path
+  If Err.Number = 0 And Len(p) > 0 Then GetOneDrivePath = p : Exit Function
+  On Error GoTo 0
+
+  ' 3) Optional registry fallback (last resort)
+  p = ""
+  On Error Resume Next
+  p = sh.RegRead("HKCU\SOFTWARE\Microsoft\OneDrive\Accounts\Business1\UserFolder")
+  On Error GoTo 0
+  GetOneDrivePath = p
 End Function
 
 Sub CopyPdfToOneDrive(sFilePath)
