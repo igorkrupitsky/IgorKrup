@@ -38,6 +38,7 @@ InstallIgorKrup
 
 ```vbscript
 Set edge = CreateObject("IgorKrup.EdgeDriver")
+edge.UpdateDriver
 edge.GetUrl "https://github.com/igorkrupitsky/IgorKrup"
 
 elementId = edge.FindElementByCss("input[aria-label='Go to file']")
