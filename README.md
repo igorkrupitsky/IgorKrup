@@ -29,11 +29,24 @@ A Windows automation and utility library for .NET, providing COM-accessible cont
 
 ```vbscript
 Set edge = CreateObject("IgorKrup.EdgeDriver")
-edge.GetUrl "https://www.example.com"
-Dim elId : elId = edge.FindElementByCss("input[name='q']")
-edge.SendKeysToElement elId, "Hello world!"
-edge.TakeScreenshot "C:\\screenshot.png"
-edge.Quit
+edge.GetUrl "https://github.com/igorkrupitsky/IgorKrup"
+
+elementId = edge.FindElementByCss("input[aria-label='Go to file']")
+
+Do While edge.IsElementDisplayed(elementId) = False
+    WScript.Sleep 100
+Loop
+
+Do While edge.IsElementEnabled(elementId) = False
+    WScript.Sleep 100
+Loop
+
+edge.ClickElement elementId 
+
+WScript.Sleep 1000
+edge.SendKeysToElement elementId, "Hello world!"
+
+MsgBox "Done!"
 ```
 
 ### Notes
