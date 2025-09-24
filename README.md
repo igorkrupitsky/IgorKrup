@@ -92,8 +92,8 @@ To use the library via COM (e.g., from VBScript):
 
 ```vbscript
 Set pdf = CreateObject("IgorKrup.PDF")
-WScript.Echo "Pages: " & pdf.PageCount("C:\\test.pdf")
-pdf.ExtractPage "C:\\test.pdf", "C:\\page1.pdf", 1
+WScript.Echo "Pages: " & pdf.PageCount("C:\temp\test.pdf")
+pdf.ExtractPage "C:\temp\test.pdf", "C:\temp\page1.pdf", 1
 ```
 
 ## Notes
