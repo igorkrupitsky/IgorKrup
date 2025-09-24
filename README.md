@@ -2,6 +2,15 @@
 
 A Windows automation and utility library for .NET, providing COM-accessible controls for UI automation, PDF manipulation, video recording, and keyboard input injection. 
 
+## How to install
+- Add RegKrupReg.vbs (https://github.com/igorkrupitsky/IgorKrup/blob/main/vbs/RegKrupReg.vbs) source in your VBS file.
+- Run the following command.  This command will download and register IgorKrup.dll and the depended DLLs.
+
+```vbscript
+Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
+Dim shell : Set shell = CreateObject("WScript.Shell")
+InstallIgorKrup
+```
 
 ## Features
 
