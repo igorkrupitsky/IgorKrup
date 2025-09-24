@@ -130,15 +130,16 @@
       <LastGenOutput>Settings.Designer.vb</LastGenOutput>
     </None>
     <None Include="README.md" />
+    <None Include="vbs\pdf_md.cmd" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="bin\ICSharpCode.SharpZipLib.dll" />
     <Content Include="Keyboard\Keyboard.cpp" />
     <Content Include="Keyboard\Keyboard.dll" />
     <Content Include="Keyboard\readme.txt" />
-    <Content Include="vbs\pdf_md_using_oneDrive.vbs" />
+    <Content Include="vbs\CopyDlls.vbs" />
+    <Content Include="vbs\IgorKrup.vbs" />
     <Content Include="vbs\pdf_md.vbs" />
-    <Content Include="vbs\RegKrupReg.vbs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
 </Project>
