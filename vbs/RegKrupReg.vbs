@@ -19,7 +19,7 @@ Sub InstallIgorKrup
             DownloadGitHubFiles oDllList, "https://github.com/igorkrupitsky/IgorKrup/blob/main/bin/Debug", sAppFolder
         End If
 
-        sLibPath = sAppFolder   & "\IgorKrup.dll"
+        sLibPath = sAppFolder & "\IgorKrup.dll"
     End If
 
     If fso.FileExists(sLibPath) Then
