@@ -2,6 +2,15 @@
 
 A Windows automation and utility library for .NET, providing COM-accessible controls for UI automation, PDF manipulation, video recording, and keyboard input injection. 
 
+## How to install
+- Add RegKrupReg.vbs (https://github.com/igorkrupitsky/IgorKrup/blob/main/vbs/RegKrupReg.vbs) source in your VBS file.
+- Run the following command.  This command will download and register IgorKrup.dll and the depended DLLs.
+
+```vbscript
+Dim fso: Set fso = CreateObject("Scripting.FileSystemObject")
+Dim shell : Set shell = CreateObject("WScript.Shell")
+InstallIgorKrup
+```
 
 ## Features
 
@@ -29,11 +38,25 @@ A Windows automation and utility library for .NET, providing COM-accessible cont
 
 ```vbscript
 Set edge = CreateObject("IgorKrup.EdgeDriver")
-edge.GetUrl "https://www.example.com"
-Dim elId : elId = edge.FindElementByCss("input[name='q']")
-edge.SendKeysToElement elId, "Hello world!"
-edge.TakeScreenshot "C:\\screenshot.png"
-edge.Quit
+edge.UpdateDriver
+edge.GetUrl "https://github.com/igorkrupitsky/IgorKrup"
+
+elementId = edge.FindElementByCss("input[aria-label='Go to file']")
+
+Do While edge.IsElementDisplayed(elementId) = False
+    WScript.Sleep 100
+Loop
+
+Do While edge.IsElementEnabled(elementId) = False
+    WScript.Sleep 100
+Loop
+
+edge.ClickElement elementId 
+
+WScript.Sleep 1000
+edge.SendKeysToElement elementId, "Hello world!"
+
+MsgBox "Done!"
 ```
 
 ### Notes
@@ -79,8 +102,8 @@ To use the library via COM (e.g., from VBScript):
 
 ```vbscript
 Set pdf = CreateObject("IgorKrup.PDF")
-WScript.Echo "Pages: " & pdf.PageCount("C:\\test.pdf")
-pdf.ExtractPage "C:\\test.pdf", "C:\\page1.pdf", 1
+WScript.Echo "Pages: " & pdf.PageCount("C:\temp\test.pdf")
+pdf.ExtractPage "C:\temp\test.pdf", "C:\temp\page1.pdf", 1
 ```
 
 ## Notes
