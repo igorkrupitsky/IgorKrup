@@ -1,6 +1,10 @@
 ﻿Public Class Form1
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
 
+        Dim oPDF As New IgorKrup.PDF
+        Dim s = oPDF.GetFileText("C:\Temp\test\21113.FE.CTA.15Feb22.corrected_date.Mikki-pg_initials.pdf")
+        MsgBox(s)
+
         'Dim oAutoIt As New IgorKrup.Control()
         'Dim windHandle = oAutoIt.WinGetHandle("*Untitled ")
         ''Dim oWinPos = oAutoIt.WinGetPos(sWindHandle)

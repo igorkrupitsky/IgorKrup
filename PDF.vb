@@ -49,6 +49,8 @@ Public Class PDF
     End Sub
 
     Public Function GetFileText(ByVal sInPdf As String) As String
+        'UglyToad might be better (needs to be converted to .net 3.5) https://github.com/UglyToad/PdfPig
+
         Dim doc As New iTextSharp.text.pdf.PdfReader(sInPdf)
         Dim sb As New System.Text.StringBuilder()
 

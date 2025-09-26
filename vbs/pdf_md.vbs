@@ -3,6 +3,8 @@ Dim shell : Set shell = CreateObject("WScript.Shell")
 Dim sRunUser: sRunUser = CreateObject("WScript.Network").UserName
 Dim sFilePath: sFilePath = ""
 Dim ie
+Dim sGhostscriptPath: sGhostscriptPath = "C:\Igor\GitHub\PdfOcr\Ghostscript\bin\gswin64.exe"
+'sGhostscriptPath = GetFolderPath() & "\Ghostscript\bin\gswin64.exe"
 
 on error resume next
 Set ie = CreateObject("IgorKrup.EdgeDriver")
@@ -53,12 +55,19 @@ If sFilePath = "" Then
     WScript.Quit 
 End If
 
+If fso.FileExists(sFilePath) Or fso.FolderExists(sFilePath) Then
+    Set ie = CreateObject("IgorKrup.EdgeDriver")
+    ie.UpdateDriver
+    ie.Get "https://m365.cloud.microsoft/chat" 
+End If
+
 If fso.FileExists(sFilePath) Then
     ProcessFile sFilePath
 ElseIf fso.FolderExists(sFilePath) Then
     ProcessFolder sFilePath
 End If
 
+ie.Quit
 MsgBox "Done"
 
 '===============================
@@ -127,16 +136,13 @@ End Sub
 
 Sub PdfToMarkDown(sFilePath)
 
+    Dim oPdf: Set oPdf = CreateObject("IgorKrup.PDF")
     Dim oFile: Set oFile = fso.GetFile(sFilePath)
     Dim sFolderPath: sFolderPath = oFile.ParentFolder.Path & "\" & fso.GetBaseName(oFile.Name)    
     If fso.FolderExists(sFolderPath) = False Then
         MsgBox "Folder does not exist: " & sFolderPath
         WScript.Quit
     End If
-    
-    Set ie = CreateObject("IgorKrup.EdgeDriver")
-    ie.UpdateDriver
-    ie.Get "https://m365.cloud.microsoft/chat" 
 
     WaitForIE
     'Wait for chat to laod
@@ -147,7 +153,7 @@ Sub PdfToMarkDown(sFilePath)
     AddConvertElementToMarkdown
 
     bFirstQuestion = True
-    sPrompt = "OCR attached PDF.  Do not provide any comments, just output."
+    sPrompt = "Convert attached image file to text.  If there is a table transcribe the entire table in full detail row by row. Do not give any files to download. Do not provide any comments, just give output."
 
     Dim oFolder: Set oFolder = fso.GetFolder(sFolderPath)
     For Each oFile In oFolder.Files
@@ -160,8 +166,30 @@ Sub PdfToMarkDown(sFilePath)
                     NewQuestion
                 End If
 
-                sAnswer = SendFile(sPrompt, oFile.Path)
+                sImgFilePath = sFolderPath & "\" & fso.GetBaseName(oFile.Path) & ".png"
+
+                If fso.FileExists(sGhostscriptPath) And fso.FileExists(sImgFilePath) = False Then
+                    'https://ghostscript.com/download/gsdnld.html
+                    '-r300 - Print quality
+                    '-r600- High-quality print/scanning
+                    shell.run """" & sGhostscriptPath & """ -dNOPAUSE -q -r600 -sDEVICE=png16m -dBATCH -sOutputFile=""" & sImgFilePath & """ """ & oFile.Path & """ -c quit", 0 , True
+                End If
+
+                If fso.FileExists(sImgFilePath) Then
+                    sAnswer = SendFile(sPrompt, sImgFilePath)
+                Else
+                    sAnswer = SendFile(sPrompt, oFile.Path)
+                End If
+
                 bFirstQuestion = False
+
+                If Len(sAnswer) < 100 Then
+                    sPdfText = oPdf.GetFileText(oFile.Path)
+                    If Len(sPdfText) / 2 > Len(sAnswer) Then
+                        'Use OCR Text
+                        sAnswer = sPdfText
+                    End If
+                End If
 
                 If sAnswer <> "" Then
                     WriteTextFile sTextFilePath, sAnswer
@@ -294,7 +322,7 @@ Sub BreakePdfToPages(sFilePath)
 
     Dim iPageCount: iPageCount = oPdf.PageCount(sFilePath)
     If iPageCount = 1 Then
-        Dim sDestFile: sDestFile = sTempFolder & "\" & fso.GetBaseName(sFilePath)
+        Dim sDestFile: sDestFile = sTempFolder & "\" & fso.GetFileName(sFilePath)
         If fso.FileExists(sDestFile) = False Then
             fso.CopyFile sFilePath, sDestFile
         End If
@@ -403,3 +431,10 @@ Sub CreateHtaFile(sHtaFilePath, sHtml, sFields, iWidth, iHeight, sTitle)
     f.WriteLine "</body></html>"
     f.Close
 End Sub
+
+Function GetFolderPath()
+	Dim oFile 'As Scripting.File
+	Set oFile = fso.GetFile(WScript.ScriptFullName)
+	GetFolderPath = oFile.ParentFolder
+End Function
+
