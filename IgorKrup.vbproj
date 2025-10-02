@@ -52,6 +52,9 @@
     <OptionInfer>On</OptionInfer>
   </PropertyGroup>
   <ItemGroup>
+    <Reference Include="BouncyCastle.Crypto">
+      <HintPath>bin\BouncyCastle.Crypto.dll</HintPath>
+    </Reference>
     <Reference Include="ICSharpCode.SharpZipLib">
       <HintPath>bin\ICSharpCode.SharpZipLib.dll</HintPath>
     </Reference>
@@ -140,6 +143,7 @@
     <Content Include="vbs\CopyDlls.vbs" />
     <Content Include="vbs\IgorKrup.vbs" />
     <Content Include="vbs\pdf_md.vbs" />
+    <Content Include="vbs\pdf_pages.vbs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.VisualBasic.targets" />
 </Project>

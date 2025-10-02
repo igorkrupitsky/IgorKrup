@@ -2,8 +2,22 @@
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
 
         Dim oPDF As New IgorKrup.PDF
-        Dim s = oPDF.GetFileText("C:\Temp\test\21113.FE.CTA.15Feb22.corrected_date.Mikki-pg_initials.pdf")
-        MsgBox(s)
+
+        'Dim s = oPDF.GetFileText("C:\Users\80014379\Desktop\Financials_Contracts\PDF_pages\18805_008.pdf")
+
+        'oPDF.ExtractPage("C:\Users\80014379\Desktop\Financials_Contracts\17747.pdf",
+        '                 "C:\Users\80014379\Desktop\Financials_Contracts\PDF_pages\17747_001.pdf", 1)
+
+        '22464
+        'oPDF.ExtractPage("C:\Users\80014379\Desktop\Financials_Contracts\19137.pdf",
+        '                 "C:\Users\80014379\Desktop\Financials_Contracts\PDF_pages\19137_001.pdf", 1)
+        '"C:\Users\80014379\Desktop\Financials_Contracts\19137.pdf"
+
+        'oPDF.ExtractPage("C:\Temp\19137.pdf",
+        '                 "C:\Users\80014379\Desktop\Financials_Contracts\PDF_pages\19137_001.pdf", 1)
+
+        'Dim s = oPDF.GetFileText("C:\Temp\test\21113.FE.CTA.15Feb22.corrected_date.Mikki-pg_initials.pdf")
+        'MsgBox(s)
 
         'Dim oAutoIt As New IgorKrup.Control()
         'Dim windHandle = oAutoIt.WinGetHandle("*Untitled ")

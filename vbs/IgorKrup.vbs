@@ -5,7 +5,7 @@ InstallIgorKrup
 '======================================
 Sub InstallIgorKrup
 
-    Dim oDllList: oDllList = Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll")
+    Dim oDllList: oDllList = Array("IgorKrup.dll", "itextsharp.dll", "Keyboard.dll", "ICSharpCode.SharpZipLib.dll", "BouncyCastle.Crypto.dll")
     Dim sRemoteAppFolder: sRemoteAppFolder = "" '"\\pwas0038\download\IgorKrup" 'Copy above files to your own file share (if you don't want to download file from github)        
     Dim sFolderPath: sFolderPath = GetFolderPath()
     Dim sLibPath: sLibPath = sFolderPath & "\bin\Debug\IgorKrup.dll"

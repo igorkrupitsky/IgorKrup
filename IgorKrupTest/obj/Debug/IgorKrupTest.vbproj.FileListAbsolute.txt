@@ -14,3 +14,5 @@ C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\obj\Debug\IgorKrupTest.exe
 C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\obj\Debug\IgorKrupTest.xml
 C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\obj\Debug\IgorKrupTest.pdb
 C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\bin\Debug\IgorKrup.pdb
+C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\bin\Debug\itextsharp.xml
+C:\Users\80014379\source\repos\IgorKrup\IgorKrupTest\bin\Debug\BouncyCastle.Crypto.dll

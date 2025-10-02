@@ -25,9 +25,10 @@ Public Class PDF
         Dim oPdfWriter As PdfWriter = Nothing
 
         Try
+            PdfReader.unethicalreading = True
             oPdfReader = New PdfReader(sInFilePath)
             oPdfDoc = New Document(oPdfReader.GetPageSizeWithRotation(iPage))
-            oPdfWriter = PdfWriter.GetInstance(oPdfDoc, New IO.FileStream(sOutFilePath, IO.FileMode.Create))
+            oPdfWriter = PdfWriter.GetInstance(oPdfDoc, New System.IO.FileStream(sOutFilePath, System.IO.FileMode.Create))
 
             oPdfDoc.Open()
             Dim oDirectContent As PdfContentByte = oPdfWriter.DirectContent
@@ -49,71 +50,26 @@ Public Class PDF
     End Sub
 
     Public Function GetFileText(ByVal sInPdf As String) As String
-        'UglyToad might be better (needs to be converted to .net 3.5) https://github.com/UglyToad/PdfPig
-
-        Dim doc As New iTextSharp.text.pdf.PdfReader(sInPdf)
         Dim sb As New System.Text.StringBuilder()
 
-        For iPage As Integer = 1 To doc.NumberOfPages
-            Dim pg As iTextSharp.text.pdf.PdfDictionary = doc.GetPageN(iPage)
-            Dim ir As Object = pg.Get(iTextSharp.text.pdf.PdfName.CONTENTS)
-            Dim value As iTextSharp.text.pdf.PdfObject = doc.GetPdfObject(ir.Number)
-            If value.IsStream() Then
-                Dim stream As iTextSharp.text.pdf.PRStream = value
-                Dim streamBytes As Byte() = iTextSharp.text.pdf.PdfReader.GetStreamBytes(stream)
-                Dim tokenizer As New iTextSharp.text.pdf.PRTokeniser(New iTextSharp.text.pdf.RandomAccessFileOrArray(streamBytes))
-
-                Try
-                    While tokenizer.NextToken()
-                        If tokenizer.TokenType = iTextSharp.text.pdf.PRTokeniser.TK_STRING Then
-                            Dim str As String = tokenizer.StringValue
-                            sb.Append(str)
-                        End If
-                    End While
-                Catch ex As Exception
-                    'Ignore
-                Finally
-                    tokenizer.Close()
-                End Try
-
-            End If
-        Next
-        doc.Close()
+        Using reader As New PdfReader(sInPdf)
+            For iPage As Integer = 1 To reader.NumberOfPages
+                ' Extract text using a built-in strategy
+                Dim text As String = iTextSharp.text.pdf.parser.PdfTextExtractor.GetTextFromPage(reader, iPage, New iTextSharp.text.pdf.parser.SimpleTextExtractionStrategy())
+                sb.AppendLine(text)
+            Next
+        End Using
 
         Return sb.ToString()
     End Function
 
     Public Function GetPageText(ByVal sInPdf As String, iPage As Integer) As String
-        Dim doc As New iTextSharp.text.pdf.PdfReader(sInPdf)
-        Dim sb As New System.Text.StringBuilder()
-        Dim pg As iTextSharp.text.pdf.PdfDictionary = doc.GetPageN(iPage)
-        Dim ir As Object = pg.Get(iTextSharp.text.pdf.PdfName.CONTENTS)
-        Dim value As iTextSharp.text.pdf.PdfObject = doc.GetPdfObject(ir.Number)
-
-        If value.IsStream() Then
-            Dim stream As iTextSharp.text.pdf.PRStream = value
-            Dim streamBytes As Byte() = iTextSharp.text.pdf.PdfReader.GetStreamBytes(stream)
-            Dim tokenizer As New iTextSharp.text.pdf.PRTokeniser(New iTextSharp.text.pdf.RandomAccessFileOrArray(streamBytes))
-
-            Try
-                While tokenizer.NextToken()
-                    If tokenizer.TokenType = iTextSharp.text.pdf.PRTokeniser.TK_STRING Then
-                        Dim str As String = tokenizer.StringValue
-                        sb.Append(str)
-                    End If
-                End While
-            Catch ex As Exception
-                'Ignore
-            Finally
-                tokenizer.Close()
-            End Try
-
-        End If
-        doc.Close()
-
-        Return sb.ToString()
+        Dim text As String = ""
+        Using reader As New PdfReader(sInPdf)
+            text = iTextSharp.text.pdf.parser.PdfTextExtractor.GetTextFromPage(reader, iPage, New iTextSharp.text.pdf.parser.SimpleTextExtractionStrategy())
+        End Using
+        Return text
     End Function
-
 
     Public Sub MergeFilesInFolder(ByVal sFolderPath As String,
                           ByVal sOutFilePath As String,
@@ -121,17 +77,17 @@ Public Class PDF
                           Optional sFileType As String = "All")
 
         Dim oOcrTempFiles As New ArrayList()
-        Dim oFiles As String() = IO.Directory.GetFiles(sFolderPath)
+        Dim oFiles As String() = System.IO.Directory.GetFiles(sFolderPath)
 
         Dim oPdfDoc As New iTextSharp.text.Document()
-        Dim oPdfWriter As PdfWriter = PdfWriter.GetInstance(oPdfDoc, New IO.FileStream(sOutFilePath, IO.FileMode.Create))
+        Dim oPdfWriter As PdfWriter = PdfWriter.GetInstance(oPdfDoc, New System.IO.FileStream(sOutFilePath, System.IO.FileMode.Create))
         oPdfDoc.Open()
 
         System.Array.Sort(Of String)(oFiles)
 
         For i As Integer = 0 To oFiles.Length - 1
             Dim sFromFilePath As String = oFiles(i)
-            Dim oFileInfo As New IO.FileInfo(sFromFilePath)
+            Dim oFileInfo As New System.IO.FileInfo(sFromFilePath)
             Dim sExt As String = PadExt(oFileInfo.Extension)
 
             Try
@@ -182,7 +138,7 @@ Public Class PDF
             oPdfWriter.Close()
         Catch ex As Exception
             Try
-                IO.File.Delete(sOutFilePath)
+                System.IO.File.Delete(sOutFilePath)
             Catch ex2 As Exception
             End Try
         End Try
@@ -266,7 +222,7 @@ Public Class PDF
             If iPageCount > 1 Then
                 For iPage As Integer = 0 To iPageCount - 1
                     oImage.SelectActiveFrame(System.Drawing.Imaging.FrameDimension.Page, iPage)
-                    Dim oMemoryStream As New IO.MemoryStream()
+                    Dim oMemoryStream As New System.IO.MemoryStream()
                     oImage.Save(oMemoryStream, System.Drawing.Imaging.ImageFormat.Png)
                     Dim oImage2 As System.Drawing.Image = System.Drawing.Image.FromStream(oMemoryStream)
                     AddImage2(oImage2, oPdfDoc, oPdfWriter)
