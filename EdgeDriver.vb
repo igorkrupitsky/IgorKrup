@@ -498,7 +498,8 @@ Public Class EdgeDriver
         {"text", keys},
         {"value", keys.ToCharArray()}
     }
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim js As New JavaScriptSerializer() With {.MaxJsonLength = Integer.MaxValue}
+        Dim sJson = js.Serialize(payload)
         SendRequest($"http://localhost:{iPort}/session/{sessionId}/element/{elementId}/value", "POST", sJson)
     End Sub
     Public Sub ClickElement(elementId As String)
@@ -612,7 +613,9 @@ Public Class EdgeDriver
 
         ' 2) POST {"file":"<base64-zip>"} to /session/{id}/file
         Dim payload = New Dictionary(Of String, Object) From {{"file", zipBase64}}
-        Dim sJson = New JavaScriptSerializer().Serialize(payload)
+        Dim oJavaScriptSerializer As New JavaScriptSerializer()
+        oJavaScriptSerializer.MaxJsonLength = Integer.MaxValue
+        Dim sJson = oJavaScriptSerializer.Serialize(payload)
 
         Dim url = $"http://localhost:{iPort}/session/{sessionId}/file"
         Dim resp = SendRequest(url, "POST", sJson)

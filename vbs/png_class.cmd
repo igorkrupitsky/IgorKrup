@@ -1,0 +1,1 @@
+wscript /x "C:\Users\80014379\source\repos\IgorKrup\vbs\png_class.vbs"

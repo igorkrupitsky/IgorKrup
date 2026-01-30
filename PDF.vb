@@ -2,6 +2,7 @@
 
 Imports iTextSharp.text
 Imports iTextSharp.text.pdf
+Imports iTextSharp.text.pdf.parser
 Imports System.Runtime.InteropServices
 
 <ProgId("IgorKrup.PDF")>
@@ -310,5 +311,210 @@ Public Class PDF
         End If
         Return s
     End Function
+    Public Function HasAnySignature(sInFilePath As String) As Boolean
+        Using oPdfReader As New PdfReader(sInFilePath)
+            Return HasAnySignature(oPdfReader)
+        End Using
+    End Function
+
+    Private Function HasAnySignature(reader As PdfReader) As Boolean
+        Dim af As AcroFields = reader.AcroFields
+        If af IsNot Nothing Then
+            Dim sigNames As IList(Of String) = af.GetSignatureNames()
+            If sigNames IsNot Nothing AndAlso sigNames.Count > 0 Then Return True 'already signed
+        End If
+
+        'Also detect unsigned signature fields (blank signature boxes already present)
+        Dim root As PdfDictionary = reader.Catalog
+        Dim acroForm As PdfDictionary = root.GetAsDict(PdfName.ACROFORM)
+        If acroForm IsNot Nothing Then
+            Dim fields As PdfArray = acroForm.GetAsArray(PdfName.FIELDS)
+            If fields IsNot Nothing Then
+                If ContainsSignatureFieldRecursive(fields) Then Return True
+            End If
+        End If
+
+        Return False
+    End Function
+
+    Private mSigSearchList As New ArrayList()
+
+    Public Sub AddSignature(ByVal sInFilePath As String, ByVal sOutFilePath As String)
+
+        If mSigSearchList.Count = 0 Then
+            Throw New Exception("Call AddSigSearch() before using AddSignature() function")
+        End If
+
+        Using oPdfReader As New PdfReader(sInFilePath)
+
+            Dim oPdfDoc As New Document()
+            Using fs As New System.IO.FileStream(sOutFilePath, System.IO.FileMode.Create, System.IO.FileAccess.Write)
+                Dim oPdfWriter As PdfWriter = PdfWriter.GetInstance(oPdfDoc, fs)
+
+                oPdfDoc.Open()
+                oPdfDoc.SetPageSize(PageSize.LEDGER.Rotate())
+
+                Dim oDirectContent As PdfContentByte = oPdfWriter.DirectContent
+                Dim iNumberOfPages As Integer = oPdfReader.NumberOfPages
+                Dim iPage As Integer = 0
+
+                Do While (iPage < iNumberOfPages)
+                    iPage += 1
+                    oPdfDoc.SetPageSize(oPdfReader.GetPageSizeWithRotation(iPage))
+                    oPdfDoc.NewPage()
+
+                    Dim oPdfImportedPage As PdfImportedPage = oPdfWriter.GetImportedPage(oPdfReader, iPage)
+                    Dim iRotation As Integer = oPdfReader.GetPageRotation(iPage)
+
+                    If (iRotation = 90) Or (iRotation = 270) Then
+                        oDirectContent.AddTemplate(oPdfImportedPage, 0, -1.0F, 1.0F, 0, 0, oPdfReader.GetPageSizeWithRotation(iPage).Height)
+                    Else
+                        oDirectContent.AddTemplate(oPdfImportedPage, 1.0F, 0, 0, 1.0F, 0, 0)
+                    End If
+
+                    Dim oTextExtractor As New TextExtractor()
+                    PdfTextExtractor.GetTextFromPage(oPdfReader, iPage, oTextExtractor)
+
+                    For Each oSearch As SigSearch In mSigSearchList
+
+                        'Dim iBottomMargin As Integer, iLeftMargin As Integer, iWidth As Integer, iHeight As Integer, sFind As String
+
+                        Dim oRect As iTextSharp.text.Rectangle = oTextExtractor.Find(oSearch.find)
+
+                        If oRect Is Nothing Then
+                            ' Try to find text manually
+                            Dim oLines As New Hashtable
+                            For i = 0 To oTextExtractor.oPoints.Count - 1
+                                Dim r As RectAndText = oTextExtractor.oPoints(i)
+
+                                If oLines.ContainsKey(r.Rect.Top) Then
+                                    oLines(r.Rect.Top) = CStr(oLines(r.Rect.Top)) & " " & r.Text
+                                Else
+                                    oLines(r.Rect.Top) = r.Text
+                                End If
+
+                                Dim sLine As String = CStr(oLines(r.Rect.Top))
+                                If sLine.IndexOf(oSearch.find, StringComparison.Ordinal) <> -1 Then
+                                    oRect = r.Rect
+                                    Exit For
+                                End If
+                            Next
+                        End If
+
+                        If oRect IsNot Nothing Then
+                            Dim iX As Integer = CInt(oRect.Left + oRect.Width + oSearch.leftMargin)
+                            Dim iY As Integer = CInt(oRect.Bottom - oSearch.bottomMargin)
+
+                            Dim field As PdfFormField = PdfFormField.CreateSignature(oPdfWriter)
+                            field.SetWidget(New Rectangle(iX, iY, iX + oSearch.width, iY + oSearch.height), PdfAnnotation.HIGHLIGHT_OUTLINE)
+
+                            'Make name unique; duplicates can break the form
+                            field.FieldName = $"myEmptySignatureField_{iPage}_{Guid.NewGuid().ToString("N")}"
+                            oPdfWriter.AddAnnotation(field)
+                        End If
+                    Next
+                Loop
+
+                oPdfDoc.Close()
+            End Using
+        End Using
+    End Sub
+
+    Private Function ContainsSignatureFieldRecursive(fields As PdfArray) As Boolean
+        For i As Integer = 0 To fields.Size - 1
+            Dim obj As PdfObject = fields.GetPdfObject(i)
+            Dim dict As PdfDictionary = TryCast(PdfReader.GetPdfObject(obj), PdfDictionary)
+            If dict Is Nothing Then Continue For
+
+            'FT = /Sig means it's a signature field
+            Dim ft As PdfName = dict.GetAsName(PdfName.FT)
+            If PdfName.SIG.Equals(ft) Then Return True
+
+            'Kids recursion
+            Dim kids As PdfArray = dict.GetAsArray(PdfName.KIDS)
+            If kids IsNot Nothing AndAlso kids.Size > 0 Then
+                If ContainsSignatureFieldRecursive(kids) Then Return True
+            End If
+        Next
+        Return False
+    End Function
+
+    Public Sub AddSigSearch(find As String, bottomMargin As Integer, leftMargin As Integer, width As Integer, height As Integer)
+        Dim o As New SigSearch()
+        o.find = find
+        o.bottomMargin = bottomMargin
+        o.leftMargin = leftMargin
+        o.width = width
+        o.height = height
+        mSigSearchList.Add(o)
+    End Sub
+
+    Private Class SigSearch
+        Public find As String
+        Public bottomMargin As Integer
+        Public leftMargin As Integer
+        Public width As Integer
+        Public height As Integer
+    End Class
+
+    Private Class TextExtractor
+        Inherits LocationTextExtractionStrategy
+        Implements iTextSharp.text.pdf.parser.ITextExtractionStrategy
+        Public oPoints As IList(Of RectAndText) = New List(Of RectAndText)
+        Public Overrides Sub RenderText(renderInfo As TextRenderInfo) 'Implements IRenderListener.RenderText
+            'https://stackoverflow.com/questions/23909893/getting-coordinates-of-string-using-itextextractionstrategy-and-locationtextextr
+            MyBase.RenderText(renderInfo)
+
+            Dim bottomLeft As Vector = renderInfo.GetDescentLine().GetStartPoint()
+            Dim topRight As Vector = renderInfo.GetAscentLine().GetEndPoint() 'GetBaseline
+
+            Dim rect As Rectangle = New Rectangle(bottomLeft(Vector.I1), bottomLeft(Vector.I2), topRight(Vector.I1), topRight(Vector.I2))
+            oPoints.Add(New RectAndText(rect, renderInfo.GetText()))
+        End Sub
+
+        Private Function GetLines() As Dictionary(Of Single, ArrayList)
+            Dim oLines As New Dictionary(Of Single, ArrayList)
+            For Each p As RectAndText In oPoints
+                Dim iBottom = p.Rect.Bottom
+
+                If oLines.ContainsKey(iBottom) = False Then
+                    oLines(iBottom) = New ArrayList()
+                End If
+
+                oLines(iBottom).Add(p)
+            Next
+
+            Return oLines
+        End Function
+
+        Function Find(ByVal sFind As String) As iTextSharp.text.Rectangle
+            Dim oLines As Dictionary(Of Single, ArrayList) = GetLines()
+
+            For Each oEntry As KeyValuePair(Of Single, ArrayList) In oLines
+                'Dim iBottom As Integer = oEntry.Key
+                Dim oRectAndTexts As ArrayList = oEntry.Value
+                Dim sLine As String = ""
+                For Each p As RectAndText In oRectAndTexts
+                    sLine += p.Text
+                    If sLine.IndexOf(sFind) <> -1 Then
+                        Return p.Rect
+                    End If
+                Next
+            Next
+
+            Return Nothing
+        End Function
+
+    End Class
+
+    Private Class RectAndText
+        Public Rect As iTextSharp.text.Rectangle
+        Public Text As String
+        Public Sub New(ByVal rect As iTextSharp.text.Rectangle, ByVal text As String)
+            Me.Rect = rect
+            Me.Text = text
+        End Sub
+    End Class
 
 End Class
+
