@@ -6,13 +6,13 @@
         'Dim inPath As String = "C:\Users\80014379\Desktop\Test\noSig\Testorderpdf.pdf"
         'Dim outPath As String = "C:\Users\80014379\Desktop\Test\out\Testorderpdf.pdf"
 
-        Dim inPath As String = "C:\Users\80014379\Desktop\Test\noSig\19141.Sub.749.Month+18.11Feb2026.pdf"
+        Dim inPath As String = "C:\Users\80014379\Desktop\Test\out\19141.Sub.749.Month+18.11Feb2026.pdf"
         Dim outPath As String = "C:\Users\80014379\Desktop\Test\out\19141.Sub.749.Month+18.11Feb2026.pdf"
 
         If oPDF.HasAnySignature(inPath) = False Then
             oPDF.AddSigSearch("Provider Signature:", 25, 20, 180, 35)
             oPDF.AddSigSearch("Provider Signature/Date/Time:", 12, 20, 180, 35)
-            oPDF.AddSignature(inPath, outPath)
+            oPDF.AddSignature(outPath, outPath)
         End If
 
         'Dim s = oPDF.GetFileText("C:\Users\80014379\Desktop\Financials_Contracts\PDF_pages\18805_008.pdf")

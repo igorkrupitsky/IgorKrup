@@ -339,10 +339,19 @@ Public Class PDF
 
     Private mSigSearchList As New ArrayList()
 
-    Public Sub AddSignature(ByVal sInFilePath As String, ByVal sOutFilePath As String)
+    Public Sub AddSignature(ByVal sInFilePath As String, ByVal outFilePath As String)
 
         If mSigSearchList.Count = 0 Then
             Throw New Exception("Call AddSigSearch() before using AddSignature() function")
+        End If
+
+        Dim sOutFilePath As String = outFilePath
+
+        If sInFilePath = sOutFilePath Then
+            Dim dir As String = System.IO.Path.GetDirectoryName(sInFilePath)
+            Dim baseName As String = System.IO.Path.GetFileNameWithoutExtension(sInFilePath)
+            Dim ext As String = System.IO.Path.GetExtension(sInFilePath)
+            sOutFilePath = System.IO.Path.Combine(dir, $"{baseName}.tmp_{Guid.NewGuid():N}{ext}")
         End If
 
         Using oPdfReader As New PdfReader(sInFilePath)
@@ -418,6 +427,12 @@ Public Class PDF
                 oPdfDoc.Close()
             End Using
         End Using
+
+        If sOutFilePath <> outFilePath Then
+            System.IO.File.Copy(sOutFilePath, outFilePath, True)
+            System.IO.File.Delete(sOutFilePath)
+        End If
+
     End Sub
 
     Private Function ContainsSignatureFieldRecursive(fields As PdfArray) As Boolean
